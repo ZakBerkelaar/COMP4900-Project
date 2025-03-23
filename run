@@ -1,0 +1,44 @@
+#!/bin/bash
+
+TARGET=$1
+
+if [ "$2" = "gdb" ]
+then
+    GDB=1
+    QEMU_BACKGROUND=1
+else
+    GDB=0
+    QEMU_BACKGROUND=0
+fi
+
+echo "Starting $TARGET benchmarks"
+
+if [ "$TARGET" = "edf" ]
+then
+    IMAGE=out/EDF/EDF.out
+elif [ "$TARGET" = "llref" ]
+then
+    IMAGE=out/LLREF/LLREF.out
+else
+    echo "Unknown target $TARGET"
+    exit 1
+fi
+
+QEMU_FLAGS=('-machine' 'mps2-an385' '-kernel' "$IMAGE" '-serial' 'stdio')
+
+if [ $GDB -eq 1 ]
+then
+    QEMU_FLAGS+=('-s' '-S')
+fi
+
+if [ $QEMU_BACKGROUND -eq 1 ]
+then
+    qemu-system-arm "${QEMU_FLAGS[@]}" &
+else
+    qemu-system-arm "${QEMU_FLAGS[@]}"
+fi
+
+if [ $GDB -eq 1 ]
+then
+    arm-none-eabi-gdb -ex "file ${TARGET}" -ex "target remote localhost:1234"
+fi
