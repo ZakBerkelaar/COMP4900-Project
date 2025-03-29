@@ -24,7 +24,7 @@ else
     exit 1
 fi
 
-QEMU_FLAGS=('-machine' 'mps2-an385' '-kernel' "$IMAGE" '-serial' 'stdio')
+QEMU_FLAGS=('-machine' 'mps2-an385' '-kernel' "$IMAGE" '-serial' 'stdio' '-semihosting' '-semihosting-config' 'enable=on,target=native,userspace=on')
 
 if [ $GDB -eq 1 ]
 then
@@ -39,6 +39,8 @@ else
 fi
 
 if [ $GDB -eq 1 ]
+
+
 then
-    arm-none-eabi-gdb -ex "file ${TARGET}" -ex "target remote localhost:1234"
+    arm-none-eabi-gdb -ex "file ${IMAGE}" -ex "target remote localhost:1234"
 fi
