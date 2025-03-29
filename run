@@ -39,8 +39,6 @@ else
 fi
 
 if [ $GDB -eq 1 ]
-
-
 then
     arm-none-eabi-gdb -ex "file ${IMAGE}" -ex "target remote localhost:1234"
 fi
