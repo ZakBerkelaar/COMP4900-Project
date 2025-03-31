@@ -27,6 +27,8 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#include "defs.h"
+
 /*-----------------------------------------------------------
 * Application specific definitions.
 *
@@ -39,7 +41,7 @@
 * See http://www.freertos.org/a00110.html
 *----------------------------------------------------------*/
 
-#define configGENERATE_RUN_TIME_STATS            0
+#define configGENERATE_RUN_TIME_STATS            1
 
 #define configUSE_PREEMPTION                     1
 #define configUSE_IDLE_HOOK                      0
@@ -139,5 +141,11 @@
 //#ifndef __IASMARM__
 //    #include "trcRecorder.h"
 //#endif
+
+#define configRUN_TIME_COUNTER_TYPE Time_t
+
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() do {} while(0)
+extern configRUN_TIME_COUNTER_TYPE get_runtime_counter(void);
+#define portGET_RUN_TIME_COUNTER_VALUE() get_runtime_counter();
 
 #endif /* FREERTOS_CONFIG_H */

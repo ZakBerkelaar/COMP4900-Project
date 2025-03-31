@@ -3,6 +3,8 @@
     "files.associations": {
         "freertos.h": "c",
         "task.h": "c",
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "semaphore.h": "c",
+        "semphr.h": "c"
     }
 }

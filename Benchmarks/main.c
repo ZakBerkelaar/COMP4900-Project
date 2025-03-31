@@ -3,6 +3,7 @@
 #include <string.h>
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semihosting.h"
 
 extern void app_main(void);
 
@@ -94,4 +95,26 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
     Note that, as the array is necessarily of type StackType_t,
     configTIMER_TASK_STACK_DEPTH is specified in words, not bytes. */
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
+
+configRUN_TIME_COUNTER_TYPE get_runtime_counter(void)
+{
+    return get_current_time();
+}
+
+void app_abort(void)
+{
+    semihosting_exit();
+}
+
+#define CLOCK_DIVISOR 100000
+
+Time_t get_current_time(void)
+{
+    return (semihosting_elapsed() / CLOCK_DIVISOR);
+}
+
+Time_t get_time_frequency_ms(void)
+{
+    return semihosting_tickfreq() / (1000 * CLOCK_DIVISOR);
 }
