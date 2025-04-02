@@ -148,7 +148,7 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
     data->id = id;
     data->queue = &worker_events[worker_count];
 
-    snprintf(name, sizeof(name), "BenchmarkWorker%d", worker_count);
+    snprintf(name, sizeof(name), "BWorker%d", worker_count);
 
     xTaskCreateStatic(
         benchmark_worker,

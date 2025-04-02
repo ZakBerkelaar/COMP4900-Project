@@ -148,4 +148,7 @@
 extern configRUN_TIME_COUNTER_TYPE get_runtime_counter(void);
 #define portGET_RUN_TIME_COUNTER_VALUE() get_runtime_counter();
 
+extern void print_new_task(void);
+#define traceTASK_SWITCHED_IN() print_new_task();
+
 #endif /* FREERTOS_CONFIG_H */
