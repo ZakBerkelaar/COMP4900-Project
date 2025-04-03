@@ -178,34 +178,13 @@
  * performed in a generic way that is not optimised to any particular
  * microcontroller architecture. */
 
-/* uxTopReadyPriority holds the priority of the highest priority ready
- * state task. */
-    #define taskRECORD_READY_PRIORITY( uxPriority ) \
-    do {                                            \
-        if( ( uxPriority ) > uxTopReadyPriority )   \
-        {                                           \
-            uxTopReadyPriority = ( uxPriority );    \
-        }                                           \
-    } while( 0 ) /* taskRECORD_READY_PRIORITY */
-
-/*-----------------------------------------------------------*/
-
     #if ( configNUMBER_OF_CORES == 1 )
         #define taskSELECT_HIGHEST_PRIORITY_TASK()                                       \
     do {                                                                                 \
-        UBaseType_t uxTopPriority = uxTopReadyPriority;                                  \
-                                                                                         \
-        /* Find the highest priority queue that contains ready tasks. */                 \
-        while( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxTopPriority ] ) ) != pdFALSE ) \
-        {                                                                                \
-            configASSERT( uxTopPriority );                                               \
-            --uxTopPriority;                                                             \
-        }                                                                                \
-                                                                                         \
-        /* listGET_OWNER_OF_NEXT_ENTRY indexes through the list, so the tasks of \
-         * the  same priority get an equal share of the processor time. */                    \
-        listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) ); \
-        uxTopReadyPriority = uxTopPriority;                                                   \
+        if ( listLIST_IS_EMPTY( pxReadyTaskList ) )                                      \
+            listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &xIdleTaskList );                 \
+        else                                                                             \
+            pxCurrentTCB = listGET_HEAD_ENTRY( pxReadyTaskList )->pvOwner;               \
     } while( 0 ) /* taskSELECT_HIGHEST_PRIORITY_TASK */
     #else /* if ( configNUMBER_OF_CORES == 1 ) */
 
@@ -281,11 +260,15 @@
  * Place the task represented by pxTCB into the appropriate ready list for
  * the task.  It is inserted at the end of the list.
  */
+//TODO: Overflow?
 #define prvAddTaskToReadyList( pxTCB )                                                                     \
     do {                                                                                                   \
         traceMOVED_TASK_TO_READY_STATE( pxTCB );                                                           \
-        taskRECORD_READY_PRIORITY( ( pxTCB )->uxPriority );                                                \
-        listINSERT_END( &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->xStateListItem ) ); \
+        listSET_LIST_ITEM_VALUE( &( ( pxTCB )->xStateListItem ), pxTCB->uxDeadline );                      \
+        if( pxTCB->uxDeadline == (TickType_t)-1 )                                                          \
+            vListInsert( &xIdleTaskList, &( ( pxTCB )->xStateListItem ) );                                 \
+        else                                                                                               \
+            vListInsert( pxReadyTaskList, &( ( pxTCB )->xStateListItem ) );                                \
         tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB );                                                      \
     } while( 0 )
 /*-----------------------------------------------------------*/
@@ -385,7 +368,8 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
 
     ListItem_t xStateListItem;                  /**< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
     ListItem_t xEventListItem;                  /**< Used to reference a task from an event list. */
-    UBaseType_t uxPriority;                     /**< The priority of the task.  0 is the lowest priority. */
+    TickType_t uxDeadline;                      /**< The dealine of the task in ticks */
+    UBaseType_t uxPriority;                     /**< The priority of the task.  0 is the lowest priority. */ //TODO: Remove
     StackType_t * pxStack;                      /**< Points to the start of the stack. */
     #if ( configNUMBER_OF_CORES > 1 )
         volatile BaseType_t xTaskRunState;      /**< Used to identify the core the task is running on, if the task is running. Otherwise, identifies the task's state - not running or yielding. */
@@ -472,7 +456,12 @@ typedef tskTCB TCB_t;
  * xDelayedTaskList1 and xDelayedTaskList2 could be moved to function scope but
  * doing so breaks some kernel aware debuggers and debuggers that rely on removing
  * the static qualifier. */
-PRIVILEGED_DATA static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /**< Prioritised ready tasks. */
+//PRIVILEGED_DATA static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /**< Prioritised ready tasks. */
+PRIVILEGED_DATA static List_t xIdleTaskList;
+PRIVILEGED_DATA static List_t xReadyTaskList1;
+PRIVILEGED_DATA static List_t xReadyTaskList2;
+PRIVILEGED_DATA static List_t * volatile pxReadyTaskList;
+PRIVILEGED_DATA static List_t * volatile pxOverflowReadyTaskList;
 PRIVILEGED_DATA static List_t xDelayedTaskList1;                         /**< Delayed tasks. */
 PRIVILEGED_DATA static List_t xDelayedTaskList2;                         /**< Delayed tasks (two lists are used - one for delays that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Points to the delayed task list currently being used. */
@@ -501,7 +490,6 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Ta
 /* Other file private variables. --------------------------------*/
 PRIVILEGED_DATA static volatile UBaseType_t uxCurrentNumberOfTasks = ( UBaseType_t ) 0U;
 PRIVILEGED_DATA static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
-PRIVILEGED_DATA static volatile UBaseType_t uxTopReadyPriority = tskIDLE_PRIORITY;
 PRIVILEGED_DATA static volatile BaseType_t xSchedulerRunning = pdFALSE;
 PRIVILEGED_DATA static volatile TickType_t xPendedTicks = ( TickType_t ) 0U;
 PRIVILEGED_DATA static volatile BaseType_t xYieldPendings[ configNUMBER_OF_CORES ] = { pdFALSE };
@@ -717,7 +705,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   const char * const pcName,
                                   const configSTACK_DEPTH_TYPE uxStackDepth,
                                   void * const pvParameters,
-                                  UBaseType_t uxPriority,
+                                  TickType_t uxDeadline,
                                   TaskHandle_t * const pxCreatedTask,
                                   TCB_t * pxNewTCB,
                                   const MemoryRegion_t * const xRegions ) PRIVILEGED_FUNCTION;
@@ -737,7 +725,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                                         const char * const pcName,
                                         const configSTACK_DEPTH_TYPE uxStackDepth,
                                         void * const pvParameters,
-                                        UBaseType_t uxPriority,
+                                        TickType_t uxDeadline,
                                         StackType_t * const puxStackBuffer,
                                         StaticTask_t * const pxTaskBuffer,
                                         TaskHandle_t * const pxCreatedTask ) PRIVILEGED_FUNCTION;
@@ -1277,7 +1265,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                                         const char * const pcName,
                                         const configSTACK_DEPTH_TYPE uxStackDepth,
                                         void * const pvParameters,
-                                        UBaseType_t uxPriority,
+                                        TickType_t uxDeadline,
                                         StackType_t * const puxStackBuffer,
                                         StaticTask_t * const pxTaskBuffer,
                                         TaskHandle_t * const pxCreatedTask )
@@ -1317,7 +1305,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             }
             #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
 
-            prvInitialiseNewTask( pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, pxCreatedTask, pxNewTCB, NULL );
+            prvInitialiseNewTask( pxTaskCode, pcName, uxStackDepth, pvParameters, uxDeadline, pxCreatedTask, pxNewTCB, NULL );
         }
         else
         {
@@ -1332,16 +1320,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                                     const char * const pcName,
                                     const configSTACK_DEPTH_TYPE uxStackDepth,
                                     void * const pvParameters,
-                                    UBaseType_t uxPriority,
+                                    TickType_t uxDeadline,
                                     StackType_t * const puxStackBuffer,
                                     StaticTask_t * const pxTaskBuffer )
     {
         TaskHandle_t xReturn = NULL;
         TCB_t * pxNewTCB;
 
-        traceENTER_xTaskCreateStatic( pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, puxStackBuffer, pxTaskBuffer );
+        //traceENTER_xTaskCreateStatic( pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, puxStackBuffer, pxTaskBuffer );
 
-        pxNewTCB = prvCreateStaticTask( pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, puxStackBuffer, pxTaskBuffer, &xReturn );
+        pxNewTCB = prvCreateStaticTask( pxTaskCode, pcName, uxStackDepth, pvParameters, uxDeadline, puxStackBuffer, pxTaskBuffer, &xReturn );
 
         if( pxNewTCB != NULL )
         {
@@ -1816,7 +1804,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   const char * const pcName,
                                   const configSTACK_DEPTH_TYPE uxStackDepth,
                                   void * const pvParameters,
-                                  UBaseType_t uxPriority,
+                                  TickType_t uxDeadline,
                                   TaskHandle_t * const pxCreatedTask,
                                   TCB_t * pxNewTCB,
                                   const MemoryRegion_t * const xRegions )
@@ -1911,18 +1899,8 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     }
 
     /* This is used as an array index so must ensure it's not too large. */
-    configASSERT( uxPriority < configMAX_PRIORITIES );
 
-    if( uxPriority >= ( UBaseType_t ) configMAX_PRIORITIES )
-    {
-        uxPriority = ( UBaseType_t ) configMAX_PRIORITIES - ( UBaseType_t ) 1U;
-    }
-    else
-    {
-        mtCOVERAGE_TEST_MARKER();
-    }
-
-    pxNewTCB->uxPriority = uxPriority;
+    pxNewTCB->uxDeadline = uxDeadline;
     #if ( configUSE_MUTEXES == 1 )
     {
         pxNewTCB->uxBasePriority = uxPriority;
@@ -1934,10 +1912,11 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
 
     /* Set the pxNewTCB as a link back from the ListItem_t.  This is so we can get
      * back to  the containing TCB from a generic item in a list. */
+    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xStateListItem ), uxDeadline );
     listSET_LIST_ITEM_OWNER( &( pxNewTCB->xStateListItem ), pxNewTCB );
 
     /* Event lists are always in priority order. */
-    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) uxPriority );
+    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xEventListItem ), uxDeadline );
     listSET_LIST_ITEM_OWNER( &( pxNewTCB->xEventListItem ), pxNewTCB );
 
     #if ( portUSING_MPU_WRAPPERS == 1 )
@@ -3635,7 +3614,7 @@ static BaseType_t prvCreateIdleTasks( void )
                                                              cIdleName,
                                                              uxIdleTaskStackSize,
                                                              ( void * ) NULL,
-                                                             portPRIVILEGE_BIT, /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
+                                                             (TickType_t)-1,
                                                              pxIdleTaskStackBuffer,
                                                              pxIdleTaskTCBBuffer );
 
@@ -4327,17 +4306,8 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery )
         vTaskSuspendAll();
         {
             /* Search the ready lists. */
-            do
-            {
-                uxQueue--;
-                pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) &( pxReadyTasksLists[ uxQueue ] ), pcNameToQuery );
-
-                if( pxTCB != NULL )
-                {
-                    /* Found the handle. */
-                    break;
-                }
-            } while( uxQueue > ( UBaseType_t ) tskIDLE_PRIORITY );
+            //TODO: Overflow
+            pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) pxReadyTaskList, pcNameToQuery );
 
             /* Search the delayed lists. */
             if( pxTCB == NULL )
@@ -4452,11 +4422,8 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery )
             {
                 /* Fill in an TaskStatus_t structure with information on each
                  * task in the Ready state. */
-                do
-                {
-                    uxQueue--;
-                    uxTask = ( UBaseType_t ) ( uxTask + prvListTasksWithinSingleList( &( pxTaskStatusArray[ uxTask ] ), &( pxReadyTasksLists[ uxQueue ] ), eReady ) );
-                } while( uxQueue > ( UBaseType_t ) tskIDLE_PRIORITY );
+                uxTask = ( UBaseType_t ) ( uxTask + prvListTasksWithinSingleList( &( pxTaskStatusArray[ uxTask ] ), ( List_t * ) pxReadyTaskList, eReady ) );
+                uxTask = ( UBaseType_t ) ( uxTask + prvListTasksWithinSingleList( &( pxTaskStatusArray[ uxTask ] ), ( List_t * ) pxOverflowReadyTaskList, eReady ) );
 
                 /* Fill in an TaskStatus_t structure with information on each
                  * task in the Blocked state. */
@@ -4827,15 +4794,7 @@ BaseType_t xTaskIncrementTick( void )
                     {
                         #if ( configNUMBER_OF_CORES == 1 )
                         {
-                            /* Preemption is on, but a context switch should
-                             * only be performed if the unblocked task's
-                             * priority is higher than the currently executing
-                             * task.
-                             * The case of equal priority tasks sharing
-                             * processing time (which happens when both
-                             * preemption and time slicing are on) is
-                             * handled below.*/
-                            if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
+                            if( pxTCB->uxDeadline < pxCurrentTCB->uxDeadline )
                             {
                                 xSwitchRequired = pdTRUE;
                             }
@@ -4854,42 +4813,6 @@ BaseType_t xTaskIncrementTick( void )
                 }
             }
         }
-
-        /* Tasks of equal priority to the currently running task will share
-         * processing time (time slice) if preemption is on, and the application
-         * writer has not explicitly turned time slicing off. */
-        #if ( ( configUSE_PREEMPTION == 1 ) && ( configUSE_TIME_SLICING == 1 ) )
-        {
-            #if ( configNUMBER_OF_CORES == 1 )
-            {
-                if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ pxCurrentTCB->uxPriority ] ) ) > 1U )
-                {
-                    xSwitchRequired = pdTRUE;
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-            #else /* #if ( configNUMBER_OF_CORES == 1 ) */
-            {
-                BaseType_t xCoreID;
-
-                for( xCoreID = 0; xCoreID < ( ( BaseType_t ) configNUMBER_OF_CORES ); xCoreID++ )
-                {
-                    if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ pxCurrentTCBs[ xCoreID ]->uxPriority ] ) ) > 1U )
-                    {
-                        xYieldPendings[ xCoreID ] = pdTRUE;
-                    }
-                    else
-                    {
-                        mtCOVERAGE_TEST_MARKER();
-                    }
-                }
-            }
-            #endif /* #if ( configNUMBER_OF_CORES == 1 ) */
-        }
-        #endif /* #if ( ( configUSE_PREEMPTION == 1 ) && ( configUSE_TIME_SLICING == 1 ) ) */
 
         #if ( configUSE_TICK_HOOK == 1 )
         {
@@ -6066,12 +5989,7 @@ static portTASK_FUNCTION( prvIdleTask, pvParameters )
 
 static void prvInitialiseTaskLists( void )
 {
-    UBaseType_t uxPriority;
-
-    for( uxPriority = ( UBaseType_t ) 0U; uxPriority < ( UBaseType_t ) configMAX_PRIORITIES; uxPriority++ )
-    {
-        vListInitialise( &( pxReadyTasksLists[ uxPriority ] ) );
-    }
+    vListInitialise( &xReadyTaskList1 );
 
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );
@@ -6088,6 +6006,8 @@ static void prvInitialiseTaskLists( void )
         vListInitialise( &xSuspendedTaskList );
     }
     #endif /* INCLUDE_vTaskSuspend */
+
+    pxReadyTaskList = &xReadyTaskList1;
 
     /* Start with pxDelayedTaskList using list1 and the pxOverflowDelayedTaskList
      * using list2. */
@@ -8833,7 +8753,6 @@ void vTaskResetState( void )
     /* Other file private variables. */
     uxCurrentNumberOfTasks = ( UBaseType_t ) 0U;
     xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
-    uxTopReadyPriority = tskIDLE_PRIORITY;
     xSchedulerRunning = pdFALSE;
     xPendedTicks = ( TickType_t ) 0U;
 

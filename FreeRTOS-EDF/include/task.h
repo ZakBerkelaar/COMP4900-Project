@@ -513,7 +513,7 @@ typedef enum
                                     const char * const pcName,
                                     const configSTACK_DEPTH_TYPE uxStackDepth,
                                     void * const pvParameters,
-                                    UBaseType_t uxPriority,
+                                    TickType_t uxDeadline,
                                     StackType_t * const puxStackBuffer,
                                     StaticTask_t * const pxTaskBuffer ) PRIVILEGED_FUNCTION;
 #endif /* configSUPPORT_STATIC_ALLOCATION */

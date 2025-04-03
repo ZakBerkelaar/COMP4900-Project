@@ -28,7 +28,7 @@ KERNEL_SOURCE_FILES += $(KERNEL_DIR)/list.c
 KERNEL_SOURCE_FILES += $(KERNEL_DIR)/queue.c
 KERNEL_SOURCE_FILES += $(KERNEL_DIR)/timers.c
 KERNEL_SOURCE_FILES += $(KERNEL_DIR)/event_groups.c
-KERNEL_SOURCE_FILES += $(KERNEL_DIR)/portable/MemMang/heap_4.c
+#KERNEL_SOURCE_FILES += $(KERNEL_DIR)/portable/MemMang/heap_4.c
 KERNEL_SOURCE_FILES += $(PORT_DIR)/port.c
 
 COMMON_SOURCE_FILES += ./startup.c

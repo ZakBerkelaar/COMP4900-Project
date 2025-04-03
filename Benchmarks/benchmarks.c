@@ -49,12 +49,12 @@ static StaticTask_t watcher_tcb;
 static StackType_t worker_stacks[BENCHMARK_WORKERS][1024];
 static BenchmarkData worker_data[BENCHMARK_WORKERS];
 static EventQueue worker_events[BENCHMARK_WORKERS];
-static uint32_t worker_count = 0;
 static StaticEventGroup_t event_storage;
 static EventGroupHandle_t finished_event;
 
 void push_event(EventQueue* queue, Event* event)
 {
+    printf("%d events\n", queue->eventCount);
     if(queue->eventCount >= MAX_EVENTS_PER_QUEUE)
     {
         printf("Too many events in queue\n");
@@ -138,29 +138,45 @@ static void benchmark_worker(void* data)
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
 
+#ifdef SCHED_EDF
+static TickType_t deadlines[BENCHMARK_WORKERS] = 
+{
+    90,
+    60,
+    70,
+    20,
+    8,
+    16,
+    24,
+    64
+};
+#endif
+
 void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
 {
-    BenchmarkData* data = &worker_data[worker_count];
+    BenchmarkData* data = &worker_data[id];
     char name[128];
 
     data->deadline = deadlineMs;
     data->runtime = runtimeMs;
     data->id = id;
-    data->queue = &worker_events[worker_count];
+    data->queue = &worker_events[id];
 
-    snprintf(name, sizeof(name), "BWorker%d", worker_count);
+    snprintf(name, sizeof(name), "BWorker%d", id);
 
     xTaskCreateStatic(
         benchmark_worker,
         name,
         sizeof(worker_stacks[0]) / sizeof(worker_stacks[0][0]),
         data,
+#ifdef SCHED_EDF
+        deadlines[id],
+#else
         4,
-        &worker_stacks[worker_count][0],
-        &worker_data[worker_count].tcb
+#endif
+        &worker_stacks[id][0],
+        &worker_data[id].tcb
     );
-
-    worker_count++;
 }
 
 static Event* output_events_sorted[128];
@@ -210,7 +226,7 @@ void run_benchmarks(void)
         "Watcher",
         sizeof(watcher_stack) / sizeof(watcher_stack[0]),
         NULL,
-        4,
+        0, // Deadline 0 to make it run first
         watcher_stack,
         &watcher_tcb
     );

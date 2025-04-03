@@ -58,8 +58,8 @@
 #define configUSE_16_BIT_TICKS                   0
 #define configIDLE_SHOULD_YIELD                  0
 #define configUSE_CO_ROUTINES                    0
-#define configUSE_MUTEXES                        1
-#define configUSE_RECURSIVE_MUTEXES              1
+#define configUSE_MUTEXES                        0
+#define configUSE_RECURSIVE_MUTEXES              0
 #define configCHECK_FOR_STACK_OVERFLOW           2
 #define configUSE_MALLOC_FAILED_HOOK             1
 #define configUSE_QUEUE_SETS                     1
@@ -69,6 +69,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES          ( 2 )
 #define configQUEUE_REGISTRY_SIZE                10
 #define configSUPPORT_STATIC_ALLOCATION          1
+#define configSUPPORT_DYNAMIC_ALLOCATION         0
 
 /* Timer related defines. */
 #define configUSE_TIMERS                         1
@@ -82,8 +83,8 @@
 /* Set the following definitions to 1 to include the API function, or zero
  * to exclude the API function. */
 
-#define INCLUDE_vTaskPrioritySet                  1
-#define INCLUDE_uxTaskPriorityGet                 1
+#define INCLUDE_vTaskPrioritySet                  0
+#define INCLUDE_uxTaskPriorityGet                 0
 #define INCLUDE_vTaskDelete                       1
 #define INCLUDE_vTaskCleanUpResources             0
 #define INCLUDE_vTaskSuspend                      1
@@ -114,7 +115,7 @@
 
 /* Use the Cortex-M3 optimised task selection rather than the generic C code
  * version. */
-#define configUSE_PORT_OPTIMISED_TASK_SELECTION          1
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION          0
 
 /* The Win32 target is capable of running all the tests tasks at the same
  * time. */
@@ -149,6 +150,6 @@ extern configRUN_TIME_COUNTER_TYPE get_runtime_counter(void);
 #define portGET_RUN_TIME_COUNTER_VALUE() get_runtime_counter();
 
 extern void print_new_task(void);
-#define traceTASK_SWITCHED_IN() print_new_task();
+//#define traceTASK_SWITCHED_IN() print_new_task();
 
 #endif /* FREERTOS_CONFIG_H */
