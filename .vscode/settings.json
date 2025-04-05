@@ -5,6 +5,7 @@
         "task.h": "c",
         "*.tcc": "c",
         "semaphore.h": "c",
-        "semphr.h": "c"
+        "semphr.h": "c",
+        "limits.h": "c"
     }
 }

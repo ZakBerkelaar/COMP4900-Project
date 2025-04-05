@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <stdatomic.h>
 #include "benchmarks.h"
 
 #define BENCHMARK_WORKERS 8
@@ -12,6 +13,7 @@
 
 typedef enum
 {
+    e_TaskStarted,
     e_TaskFinished
 } EventType;
 
@@ -25,13 +27,18 @@ typedef struct
         struct
         {
             uint32_t worker_id;
+        } started;
+
+        struct
+        {
+            uint32_t worker_id;
         } finished;
     } data;
 } Event;
 
 typedef struct
 {
-    uint32_t eventCount;
+    _Atomic uint32_t eventCount;
     Event events[MAX_EVENTS_PER_QUEUE];
 } EventQueue;
 
@@ -48,92 +55,41 @@ static StackType_t watcher_stack[1024];
 static StaticTask_t watcher_tcb;
 static StackType_t worker_stacks[BENCHMARK_WORKERS][1024];
 static BenchmarkData worker_data[BENCHMARK_WORKERS];
-static EventQueue worker_events[BENCHMARK_WORKERS];
 static StaticEventGroup_t event_storage;
 static EventGroupHandle_t finished_event;
 
-void push_event(EventQueue* queue, Event* event)
+static EventQueue eQueue;
+
+void push_event(Event* event)
 {
-    printf("%d events\n", queue->eventCount);
-    if(queue->eventCount >= MAX_EVENTS_PER_QUEUE)
-    {
-        printf("Too many events in queue\n");
-        return;
-    }
-
-    queue->events[queue->eventCount++] = *event;
-}
-
-uint32_t combine_queues(EventQueue** queues, uint32_t numQueues, Event** output, uint32_t numOut)
-{
-    uint32_t outCounter = 0;
-    uint32_t inCounter[numQueues];
-    Event* earliest = NULL;
-    uint32_t earliest_queue;
-    uint32_t total = 0;
-
-    for(uint32_t i = 0; i < numQueues; ++i)
-    {
-        total += queues[i]->eventCount;
-    }
-
-    if(total > numOut)
-    {
-        printf("Too many events in input to combine into output\n");
-        return 0;
-    }
-
-    for(uint32_t i = 0; i < numQueues; ++i)
-    {
-        inCounter[i] = 0;
-    }
-
-    while(1)
-    {
-        earliest = NULL;
-        for(uint32_t i = 0; i < numQueues; ++i)
-        {
-            if(inCounter[i] < queues[i]->eventCount &&
-               (!earliest || queues[i]->events[inCounter[i]].time < earliest->time))
-            {
-                earliest = &queues[i]->events[inCounter[i]];
-                earliest_queue = i;
-            }
-        }
-        if(!earliest)
-        {
-            // No data left
-            break;
-        }
-
-        output[outCounter++] = earliest;
-        inCounter[earliest_queue]++;
-    }
-
-    return outCounter;
+    uint32_t idx = atomic_fetch_add(&eQueue.eventCount, 1);
+    eQueue.events[idx] = *event;
 }
 
 static void benchmark_worker(void* data)
 {
     Event e;
     BenchmarkData* bData = (BenchmarkData*)data;
-    printf("Starting\n");
-
     const uint32_t cycles = bData->runtime * 250000;
+
+    e.type = e_TaskStarted;
+    e.time = get_current_time();
+    e.data.started.worker_id = bData->id;
+    push_event(&e);
 
     volatile uint8_t dummy = 0;
     for(uint32_t i; i < cycles; ++i)
     {
         dummy += (uint8_t)i;
     }
-
+    
     e.type = e_TaskFinished;
     e.time = get_current_time();
     e.data.finished.worker_id = bData->id;
-    push_event(bData->queue, &e);
+    push_event(&e);
 
+    // Let the watcher know we are done here
     xEventGroupSetBits(finished_event, 1 << bData->id);
-    printf("Done\n");
 
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
@@ -160,7 +116,7 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
     data->deadline = deadlineMs;
     data->runtime = runtimeMs;
     data->id = id;
-    data->queue = &worker_events[id];
+    //data->queue = &worker_events[id];
 
     snprintf(name, sizeof(name), "BWorker%d", id);
 
@@ -189,22 +145,23 @@ void watcher(void* args)
     xEventGroupSync(finished_event, 0, (1 << BENCHMARK_WORKERS) - 1, portMAX_DELAY);
     printf("All tasks done\n");
 
-    for(uint32_t i = 0; i < BENCHMARK_WORKERS; ++i)
-        queues[i] = &worker_events[i];
+    event_count = eQueue.eventCount;
 
-    event_count = combine_queues(queues, BENCHMARK_WORKERS, output_events_sorted, sizeof(output_events_sorted) / sizeof(output_events_sorted[0]));
-
-    printf("Total events: %d\n", queues[0]->eventCount);
+    printf("Total events: %d\n", event_count);
 
     printf("---OUTPUT START---\n");
     for(uint32_t i = 0; i < event_count; ++i)
     {
-        Event* current = output_events_sorted[i];
+        Event* current = &eQueue.events[i];
         uint32_t ms = current->time / get_time_frequency_ms();
 
+        if(current->type == e_TaskStarted)
+        {
+            printf("%d ms | START task%d\n", ms, current->data.finished.worker_id);
+        }
         if(current->type == e_TaskFinished)
         {
-            printf("Task %d finished at time %d ms\n", current->data.finished.worker_id, ms);
+            printf("%d ms | END task%d\n", ms, current->data.finished.worker_id);
         }
     }
 

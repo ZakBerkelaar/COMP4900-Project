@@ -10,7 +10,7 @@ static uint32_t semihost_call(uint32_t op, uint32_t param)
 {
     uint32_t res;
 
-    __asm(
+    __asm volatile (
         "MOV r0, %[aop]\n"
         "MOV r1, %[aparam]\n" 
         "BKPT #0xAB\n"
