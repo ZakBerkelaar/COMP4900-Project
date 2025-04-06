@@ -192,6 +192,7 @@
 #endif
 
 #ifndef configUSE_TICK_HOOK
+  #define configUSE_TICK_HOOK 1
     #error Missing definition:  configUSE_TICK_HOOK must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
 #endif
 

@@ -41,6 +41,10 @@
 #include "timers.h"
 #include "stack_macros.h"
 
+#define listFOR_EACH(item, list) \
+    for ((item) = (list)->xListEnd.pxNext; (item) != &(list)->xListEnd; (item) = (item)->pxNext)
+
+
 /* The default definitions are only available for non-MPU ports. The
  * reason is that the stack alignment requirements vary for different
  * architectures.*/
@@ -449,6 +453,11 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
     #if ( configUSE_POSIX_ERRNO == 1 )
         int iTaskErrno;
     #endif
+    
+    TickType_t xWCET;
+    TickType_t xRemainingExecutionTime;
+    TickType_t xLocalDeadline;
+    TickType_t xWindowStartTime
 } tskTCB;
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
@@ -478,6 +487,8 @@ PRIVILEGED_DATA static List_t xDelayedTaskList2;                         /**< De
 PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Points to the delayed task list currently being used. */
 PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /**< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
+
+static TCB_t *pxSelectLLREFTask(void);
 
 #if ( INCLUDE_vTaskDelete == 1 )
 
@@ -1812,6 +1823,49 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION */
 /*-----------------------------------------------------------*/
 
+static TCB_t *pxSelectLLREFTask(void)
+{
+    TCB_t *pxBestTask = NULL;
+    TickType_t xMaxRemainingTime = 0;
+    TickType_t xNow = xTaskGetTickCount();
+
+    for (UBaseType_t uxPriority = 0; uxPriority <= uxTopReadyPriority; uxPriority++)
+    {
+        List_t *pxReadyList = &(pxReadyTasksLists[ uxPriority ]);
+
+        if (listLIST_IS_EMPTY(pxReadyList))
+            continue;
+
+        ListItem_t *pxListItem;
+        TCB_t *pxTCB;
+
+        listFOR_EACH(pxListItem, pxReadyList)
+        {
+            pxTCB = (TCB_t *) listGET_LIST_ITEM_OWNER(pxListItem);
+
+            // Optional: enforce local window constraint
+            if (xNow > pxTCB->xLocalDeadline)
+                continue;
+
+            // LLREF: Pick the task with the largest remaining execution time
+            if (pxTCB->xRemainingExecutionTime > xMaxRemainingTime)
+            {
+                xMaxRemainingTime = pxTCB->xRemainingExecutionTime;
+                pxBestTask = pxTCB;
+            }
+        }
+    }
+
+    // If none found, fall back to current task (or idle task)
+    if (pxBestTask == NULL)
+    {
+        pxBestTask = pxCurrentTCB;  // or pxIdleTask if you want
+    }
+
+    return pxBestTask;
+}
+
+
 static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   const char * const pcName,
                                   const configSTACK_DEPTH_TYPE uxStackDepth,
@@ -2033,6 +2087,11 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     {
         mtCOVERAGE_TEST_MARKER();
     }
+
+    pxNewTCB->xWCET = pdMS_TO_TICKS(5);  // Hardcoded or parameterized
+    pxNewTCB->xRemainingExecutionTime = pxNewTCB->xWCET;
+    pxNewTCB->xWindowStartTime = xTaskGetTickCount();
+    pxNewTCB->xLocalDeadline = pxNewTCB->xWindowStartTime + pdMS_TO_TICKS(20);
 }
 /*-----------------------------------------------------------*/
 
@@ -5109,6 +5168,8 @@ BaseType_t xTaskIncrementTick( void )
     void vTaskSwitchContext( void )
     {
         traceENTER_vTaskSwitchContext();
+
+        pxCurrentTCB = pxSelectLLREFTask();
 
         if( uxSchedulerSuspended != ( UBaseType_t ) 0U )
         {
@@ -8858,4 +8919,12 @@ void vTaskResetState( void )
     }
     #endif /* #if ( configGENERATE_RUN_TIME_STATS == 1 ) */
 }
+
+TickType_t vGetTaskRemainingExecutionTime(TaskHandle_t xTask)
+{
+    TCB_t *pxTCB = (TCB_t *) xTask;
+    return pxTCB->xRemainingExecutionTime;
+}
+
+
 /*-----------------------------------------------------------*/
