@@ -15,10 +15,10 @@ echo "Starting $TARGET benchmarks"
 
 if [ "$TARGET" = "edf" ]
 then
-    IMAGE=out/EDF/EDF.out
+    IMAGE=build/edf
 elif [ "$TARGET" = "llref" ]
 then
-    IMAGE=out/LLREF/LLREF.out
+    IMAGE=build/llref
 else
     echo "Unknown target $TARGET"
     exit 1
