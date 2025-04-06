@@ -1,0 +1,30 @@
+Starting llref benchmarks
+We are running llref
+All tasks done
+Total events: 24
+---OUTPUT START---
+163 ms | ARRIVE task0
+163 ms | ARRIVE task1
+163 ms | ARRIVE task2
+163 ms | ARRIVE task3
+163 ms | ARRIVE task4
+163 ms | ARRIVE task5
+163 ms | ARRIVE task6
+163 ms | ARRIVE task7
+165 ms | START task0
+165 ms | START task1
+166 ms | START task2
+167 ms | START task3
+226 ms | START task4
+227 ms | START task5
+228 ms | START task6
+229 ms | START task7
+15432 ms | END task4
+16049 ms | END task7
+16392 ms | END task3
+16400 ms | END task1
+16450 ms | END task2
+16471 ms | END task0
+16577 ms | END task5
+16596 ms | END task6
+----OUTPUT END----

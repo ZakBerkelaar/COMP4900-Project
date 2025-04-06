@@ -1,0 +1,30 @@
+Starting edf benchmarks
+We are running edf
+All tasks done
+Total events: 24
+---OUTPUT START---
+128 ms | ARRIVE task0
+128 ms | ARRIVE task1
+128 ms | ARRIVE task2
+128 ms | ARRIVE task3
+128 ms | ARRIVE task4
+128 ms | ARRIVE task5
+128 ms | ARRIVE task6
+128 ms | ARRIVE task7
+129 ms | START task4
+2239 ms | END task4
+2239 ms | START task5
+4280 ms | END task5
+4280 ms | START task3
+6323 ms | END task3
+6323 ms | START task6
+8684 ms | END task6
+8684 ms | START task1
+10667 ms | END task1
+10667 ms | START task7
+12665 ms | END task7
+12665 ms | START task2
+14666 ms | END task2
+14666 ms | START task0
+16649 ms | END task0
+----OUTPUT END----

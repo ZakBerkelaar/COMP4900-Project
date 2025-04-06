@@ -1,0 +1,25 @@
+#!/bin/bash
+
+RUNS=3
+
+if [ "$1" = "qemu" ]
+then
+    PLATFORM="qemu"
+else
+    echo "Invalid platform"
+    exit 1
+fi
+
+mkdir -p "data/$PLATFORM"
+mkdir "data/$PLATFORM/edf"
+mkdir "data/$PLATFORM/llref"
+
+if [ "$PLATFORM" = "qemu" ]
+then
+    for i in $(seq 1 $RUNS)
+    do
+        echo "Starting run $i"
+        ./run edf > "data/$PLATFORM/edf/run$i.out"
+        ./run llref > "data/$PLATFORM/llref/run$i.out"
+    done
+fi

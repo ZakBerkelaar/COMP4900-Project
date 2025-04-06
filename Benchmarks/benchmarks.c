@@ -10,9 +10,11 @@
 
 #define BENCHMARK_WORKERS 8
 #define MAX_EVENTS_PER_QUEUE 64
+#define TASK_CREATION_COUNT 255
 
 typedef enum
 {
+    e_TaskArrived,
     e_TaskStarted,
     e_TaskFinished
 } EventType;
@@ -24,6 +26,11 @@ typedef struct
 
     union
     {
+        struct
+        {
+            uint32_t worker_id;
+        } arrived;
+
         struct
         {
             uint32_t worker_id;
@@ -135,8 +142,6 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
     );
 }
 
-static Event* output_events_sorted[128];
-
 void watcher(void* args)
 {
     EventQueue* queues[BENCHMARK_WORKERS];
@@ -155,11 +160,15 @@ void watcher(void* args)
         Event* current = &eQueue.events[i];
         uint32_t ms = current->time / get_time_frequency_ms();
 
+        if(current->type == e_TaskArrived)
+        {
+            printf("%d ms | ARRIVE task%d\n", ms, current->data.finished.worker_id);
+        }
         if(current->type == e_TaskStarted)
         {
             printf("%d ms | START task%d\n", ms, current->data.finished.worker_id);
         }
-        if(current->type == e_TaskFinished)
+        else if(current->type == e_TaskFinished)
         {
             printf("%d ms | END task%d\n", ms, current->data.finished.worker_id);
         }
@@ -169,8 +178,42 @@ void watcher(void* args)
     app_abort();
 }
 
+StaticTask_t tempTaskTcbs[TASK_CREATION_COUNT];
+TaskHandle_t tmpTaskHandles[TASK_CREATION_COUNT];
+
+void task_creation_benchmark()
+{
+    printf("Starting\n");
+
+    for(uint32_t j = 0; j < 2048 * 2048 * 64; ++j);
+    {
+        for(uint32_t i = 0; i < TASK_CREATION_COUNT; ++i)
+        {
+            tmpTaskHandles[i] = xTaskCreateStatic(
+                NULL,
+                "TestTask",
+                1024,
+                NULL,
+                0,
+                NULL,
+                &tempTaskTcbs[i]
+            );
+        }
+
+        for(uint32_t i = 0; i < TASK_CREATION_COUNT; ++i)
+        {
+            vTaskDelete(tmpTaskHandles[i]);
+        }
+    }
+
+    printf("Ending %d\n", get_current_time() / get_time_frequency_ms());
+    app_abort();
+}
+
 void run_benchmarks(void)
 {
+    Event e;
+
     finished_event = xEventGroupCreateStatic(&event_storage);
     if(!finished_event)
     {
@@ -193,6 +236,15 @@ void run_benchmarks(void)
         create_benchmark_task(i, 0, 2000);
     }
 
+    // All tasks arrive at the same time
+    e.type = e_TaskArrived;
+    e.time = get_current_time();
+    for(uint32_t i = 0; i < BENCHMARK_WORKERS; ++i)
+    {
+        e.data.arrived.worker_id = i;
+
+        push_event(&e);
+    }
     vTaskStartScheduler();
 
     printf("Benchmarks finished");
