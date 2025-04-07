@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <stdatomic.h>
 #include "benchmarks.h"
+#include <string.h>
 
 #define BENCHMARK_WORKERS 8
 #define MAX_EVENTS_PER_QUEUE 64
@@ -85,10 +86,10 @@ static void benchmark_worker(void* data)
     e.data.started.worker_id = bData->id;
     push_event(&e);
 
-    volatile uint8_t dummy = 0;
-    for(uint32_t i=0; i < cycles; ++i)
+    volatile uint32_t dummy = 0;
+    for(uint32_t i = 0; i < cycles; ++i)
     {
-        dummy += (uint8_t)i;
+        dummy += i;
     }
     
     e.type = e_TaskFinished;
