@@ -269,6 +269,7 @@ void run_benchmarks(void)
 
         push_event(&e);
     }
+
     vTaskStartScheduler();
 
     printf("Benchmarks finished");

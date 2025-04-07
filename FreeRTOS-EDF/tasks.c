@@ -28,6 +28,7 @@
 
 /* Standard includes. */
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 /* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
@@ -5989,7 +5990,9 @@ static portTASK_FUNCTION( prvIdleTask, pvParameters )
 
 static void prvInitialiseTaskLists( void )
 {
+    vListInitialise( &xIdleTaskList );
     vListInitialise( &xReadyTaskList1 );
+    vListInitialise( &xReadyTaskList2 );
 
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );

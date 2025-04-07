@@ -4,6 +4,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semihosting.h"
+#ifdef PLATFORM_RPI
+#include "pico/stdlib.h"
+#endif
 
 extern void app_main(void);
 
@@ -24,7 +27,14 @@ static void prvUARTInit( void )
 
 void main(void)
 {
+#if defined PLATFORM_QEMU
     prvUARTInit();
+    printf("Running on qemu\n");
+#elif defined PLATFORM_RPI
+    stdio_init_all();
+    getchar(); // Wait until we receive something from serial so we can capture the entire trace
+    printf("Running on rpi\n");
+#endif
     app_main();
     return;
 }
@@ -104,17 +114,37 @@ configRUN_TIME_COUNTER_TYPE get_runtime_counter(void)
 
 void app_abort(void)
 {
+#if defined PLATFORM_QEMU
     semihosting_exit();
+#elif defined PLATFORM_RPI
+    printf("App aborted\n");
+    while(1) {}
+#else
+    #error Not implemented
+#endif
 }
 
 #define CLOCK_DIVISOR 100000
 
 Time_t get_current_time(void)
 {
+#if defined PLATFORM_QEMU
     return (semihosting_elapsed() / CLOCK_DIVISOR);
+#elif defined PLATFORM_RPI
+    absolute_time_t time = get_absolute_time();
+    return to_ms_since_boot(time);
+#else
+    #error Not implemented
+#endif
 }
 
 Time_t get_time_frequency_ms(void)
 {
+#if defined PLATFORM_QEMU
     return semihosting_tickfreq() / (1000 * CLOCK_DIVISOR);
+#elif defined PLATFORM_RPI
+    return 1; // It's already in ms on rpi
+#else
+    #error Not implemented
+#endif
 }
