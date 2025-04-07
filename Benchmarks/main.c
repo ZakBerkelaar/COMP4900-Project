@@ -33,7 +33,11 @@ void main(void)
 #elif defined PLATFORM_RPI
     stdio_init_all();
     getchar(); // Wait until we receive something from serial so we can capture the entire trace
-    printf("Running on rpi\n");
+    #if defined USE_SMP
+        printf("Running on rpi using SMP (%d cores)\n", configNUMBER_OF_CORES);
+    #else
+        printf("Running on rpi without SMP\n");
+    #endif
 #endif
     app_main();
     return;
@@ -53,9 +57,22 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
 }
 
-/* configSUPPORT_STATIC_ALLOCATION is set to 1, so the application must provide an
-   implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
-   used by the Idle task. */
+#ifdef USE_SMP
+void vApplicationGetPassiveIdleTaskMemory(StaticTask_t ** ppxIdleTaskTCBBuffer,
+                                          StackType_t ** ppxIdleTaskStackBuffer,
+                                          configSTACK_DEPTH_TYPE * puxIdleTaskStackSize,
+                                          BaseType_t xPassiveIdleTaskIndex )
+{
+    // There are configNUMBER_OF_CORES - 1 PASSIVE idle tasks
+    static StaticTask_t passiveIdleTCBs[configNUMBER_OF_CORES - 1];
+    static StackType_t passiveIdleStacks[configNUMBER_OF_CORES - 1][configMINIMAL_STACK_SIZE];
+
+    *ppxIdleTaskTCBBuffer = &passiveIdleTCBs[xPassiveIdleTaskIndex];
+    *ppxIdleTaskStackBuffer = &passiveIdleStacks[xPassiveIdleTaskIndex][0];
+    *puxIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
+#endif
+
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    StackType_t **ppxIdleTaskStackBuffer,
                                    uint32_t *pulIdleTaskStackSize)
@@ -78,6 +95,7 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
     configMINIMAL_STACK_SIZE is specified in words, not bytes. */
     *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
 }
+
 
 /*-----------------------------------------------------------*/
 

@@ -6,6 +6,7 @@
         "*.tcc": "c",
         "semaphore.h": "c",
         "semphr.h": "c",
-        "limits.h": "c"
+        "limits.h": "c",
+        "defs.h": "c"
     }
 }

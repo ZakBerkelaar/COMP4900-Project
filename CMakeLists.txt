@@ -81,8 +81,8 @@ set(TARGETS
 # Add specific sources/includes
 foreach(T ${TARGETS})
     string(TOUPPER ${PLATFORM} PLATFORM_UPPER)
+    string(TOUPPER ${T} UPPER)
     if(${PLATFORM} STREQUAL "qemu")
-        string(TOUPPER ${T} UPPER)
         set(KERNEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-${UPPER}")
         set(PORT_DIR "${KERNEL_DIR}/portable/GCC/ARM_CM3")
         set(SPECIFIC_SOURCES

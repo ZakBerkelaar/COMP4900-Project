@@ -103,6 +103,15 @@
 #define configSUPPORT_PICO_SYNC_INTEROP         1
 #define configSUPPORT_PICO_TIME_INTEROP         1
 
+#ifdef USE_SMP
+#define configNUMBER_OF_CORES                   2
+#define configTICK_CORE                         0
+#define configRUN_MULTIPLE_PRIORITIES           1
+#define configUSE_CORE_AFFINITY                 1
+#define configUSE_PASSIVE_IDLE_HOOK             0
+#define portSUPPORT_SMP                         1
+#endif
+
 /* This demo makes use of one or more example stats formatting functions. These
  * format the raw data provided by the uxTaskGetSystemState() function in to human
  * readable ASCII form.  See the notes in the implementation of vTaskList() within
@@ -116,8 +125,7 @@
  * See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html. */
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY             ( 4 )
 
-/* Use the Cortex-M3 optimised task selection rather than the generic C code
- * version. */
+// Since we are doing a custom implementation we want to ensure it is used
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION          0
 
 /* The Win32 target is capable of running all the tests tasks at the same
