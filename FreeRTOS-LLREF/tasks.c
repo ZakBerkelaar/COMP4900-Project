@@ -29,6 +29,7 @@
 /* Standard includes. */
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
  * all the API functions to use the MPU wrappers.  That should only be done when
@@ -40,9 +41,6 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
-
-#define listFOR_EACH(item, list) \
-    for ((item) = (list)->xListEnd.pxNext; (item) != &(list)->xListEnd; (item) = (item)->pxNext)
 
 
 /* The default definitions are only available for non-MPU ports. The
@@ -182,39 +180,15 @@
  * performed in a generic way that is not optimised to any particular
  * microcontroller architecture. */
 
-/* uxTopReadyPriority holds the priority of the highest priority ready
- * state task. */
-    #define taskRECORD_READY_PRIORITY( uxPriority ) \
-    do {                                            \
-        if( ( uxPriority ) > uxTopReadyPriority )   \
-        {                                           \
-            uxTopReadyPriority = ( uxPriority );    \
-        }                                           \
-    } while( 0 ) /* taskRECORD_READY_PRIORITY */
-
 /*-----------------------------------------------------------*/
 
     #if ( configNUMBER_OF_CORES == 1 )
         #define taskSELECT_HIGHEST_PRIORITY_TASK()                                       \
     do {                                                                                 \
-        UBaseType_t uxTopPriority = uxTopReadyPriority;                                  \
-                                                                                         \
-        /* Find the highest priority queue that contains ready tasks. */                 \
-        while( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxTopPriority ] ) ) != pdFALSE ) \
-        {                                                                                \
-            configASSERT( uxTopPriority );                                               \
-            --uxTopPriority;                                                             \
-        }                                                                                \
-                                                                                         \
-        /* listGET_OWNER_OF_NEXT_ENTRY indexes through the list, so the tasks of \
-         * the  same priority get an equal share of the processor time. */                    \
-        listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) ); \
-        uxTopReadyPriority = uxTopPriority;                                                   \
+        pxCurrentTCB = pxSelectLLREFTask(); \
     } while( 0 ) /* taskSELECT_HIGHEST_PRIORITY_TASK */
     #else /* if ( configNUMBER_OF_CORES == 1 ) */
-
         #define taskSELECT_HIGHEST_PRIORITY_TASK( xCoreID )    prvSelectHighestPriorityTask( xCoreID )
-
     #endif /* if ( configNUMBER_OF_CORES == 1 ) */
 
 /*-----------------------------------------------------------*/
@@ -288,8 +262,7 @@
 #define prvAddTaskToReadyList( pxTCB )                                                                     \
     do {                                                                                                   \
         traceMOVED_TASK_TO_READY_STATE( pxTCB );                                                           \
-        taskRECORD_READY_PRIORITY( ( pxTCB )->uxPriority );                                                \
-        listINSERT_END( &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->xStateListItem ) ); \
+        listINSERT_END( &( xReadyTaskListLLREF ), &( ( pxTCB )->xStateListItem ) ); \
         tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB );                                                      \
     } while( 0 )
 /*-----------------------------------------------------------*/
@@ -462,8 +435,8 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
  * below to enable the use of older kernel aware debuggers. */
-typedef tskTCB TCB_t;
 
+typedef tskTCB TCB_t;
 #if ( configNUMBER_OF_CORES == 1 )
     /* MISRA Ref 8.4.1 [Declaration shall be visible] */
     /* More details at: https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/MISRA.md#rule-84 */
@@ -481,7 +454,7 @@ typedef tskTCB TCB_t;
  * xDelayedTaskList1 and xDelayedTaskList2 could be moved to function scope but
  * doing so breaks some kernel aware debuggers and debuggers that rely on removing
  * the static qualifier. */
-PRIVILEGED_DATA static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /**< Prioritised ready tasks. */
+PRIVILEGED_DATA static List_t xReadyTaskListLLREF; /**< Prioritised ready tasks. */
 PRIVILEGED_DATA static List_t xDelayedTaskList1;                         /**< Delayed tasks. */
 PRIVILEGED_DATA static List_t xDelayedTaskList2;                         /**< Delayed tasks (two lists are used - one for delays that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Points to the delayed task list currently being used. */
@@ -556,6 +529,42 @@ PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime[ conf
 /*
  * Creates the idle tasks during scheduler start.
  */
+
+
+void pubSetxWCET(TaskHandle_t TCB, TickType_t new_xWCET) {
+    prvGetTCBFromHandle(TCB)->xWCET = new_xWCET;
+}
+
+TickType_t pubGetxWCET(TaskHandle_t TCB) {
+    return prvGetTCBFromHandle(TCB)->xWCET;
+}
+
+void pubSetxRemainingExecutionTime(TaskHandle_t TCB, TickType_t new_xRemainingExecutionTime) {
+    prvGetTCBFromHandle(TCB)->xRemainingExecutionTime = new_xRemainingExecutionTime;
+}
+
+TickType_t pubGetxRemainingExecutionTime(TaskHandle_t TCB) {
+    return prvGetTCBFromHandle(TCB)->xRemainingExecutionTime;
+}
+
+void pubSetxLocalDeadline(TaskHandle_t TCB, TickType_t new_xLocalDeadline) {
+    prvGetTCBFromHandle(TCB)->xLocalDeadline = new_xLocalDeadline;
+}
+
+TickType_t pubGetxLocalDeadline(TaskHandle_t TCB) {
+    return prvGetTCBFromHandle(TCB)->xLocalDeadline;
+}
+
+void pubSetxWindowStartTime(TaskHandle_t TCB, TickType_t new_xWindowStartTime) {
+    prvGetTCBFromHandle(TCB)->xWindowStartTime = new_xWindowStartTime;
+}
+
+TickType_t pubGetxWindowStartTime(TaskHandle_t TCB) {
+    return prvGetTCBFromHandle(TCB)->xWindowStartTime;
+}
+
+static BaseType_t prvCreateIdleTasks( void );
+
 static BaseType_t prvCreateIdleTasks( void );
 
 #if ( configNUMBER_OF_CORES > 1 )
@@ -1829,30 +1838,24 @@ static TCB_t *pxSelectLLREFTask(void)
     TickType_t xMaxRemainingTime = 0;
     TickType_t xNow = xTaskGetTickCount();
 
-    for (UBaseType_t uxPriority = 0; uxPriority <= uxTopReadyPriority; uxPriority++)
+    ListItem_t *pxListItem;
+    TCB_t *pxTCB;
+
+    const ListItem_t * pxEndMarker = listGET_END_MARKER( &xReadyTaskListLLREF );
+
+    for( pxListItem = listGET_HEAD_ENTRY( &xReadyTaskListLLREF ); pxListItem != pxEndMarker; pxListItem = listGET_NEXT( pxListItem ) )
     {
-        List_t *pxReadyList = &(pxReadyTasksLists[ uxPriority ]);
+        pxTCB = (TCB_t *) listGET_LIST_ITEM_OWNER(pxListItem);
 
-        if (listLIST_IS_EMPTY(pxReadyList))
-            continue;
+        // Optional: enforce local window constraint
+        //if (xNow > pxTCB->xLocalDeadline)
+        //    continue;
 
-        ListItem_t *pxListItem;
-        TCB_t *pxTCB;
-
-        listFOR_EACH(pxListItem, pxReadyList)
+        // LLREF: Pick the task with the largest remaining execution time
+        if (pxTCB->xRemainingExecutionTime > xMaxRemainingTime)
         {
-            pxTCB = (TCB_t *) listGET_LIST_ITEM_OWNER(pxListItem);
-
-            // Optional: enforce local window constraint
-            if (xNow > pxTCB->xLocalDeadline)
-                continue;
-
-            // LLREF: Pick the task with the largest remaining execution time
-            if (pxTCB->xRemainingExecutionTime > xMaxRemainingTime)
-            {
-                xMaxRemainingTime = pxTCB->xRemainingExecutionTime;
-                pxBestTask = pxTCB;
-            }
+            xMaxRemainingTime = pxTCB->xRemainingExecutionTime;
+            pxBestTask = pxTCB;
         }
     }
 
@@ -2087,6 +2090,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     {
         mtCOVERAGE_TEST_MARKER();
     }
+
 
     pxNewTCB->xWCET = pdMS_TO_TICKS(5);  // Hardcoded or parameterized
     pxNewTCB->xRemainingExecutionTime = pxNewTCB->xWCET;
@@ -4385,18 +4389,7 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery )
 
         vTaskSuspendAll();
         {
-            /* Search the ready lists. */
-            do
-            {
-                uxQueue--;
-                pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) &( pxReadyTasksLists[ uxQueue ] ), pcNameToQuery );
-
-                if( pxTCB != NULL )
-                {
-                    /* Found the handle. */
-                    break;
-                }
-            } while( uxQueue > ( UBaseType_t ) tskIDLE_PRIORITY );
+            pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) &( xReadyTaskListLLREF ), pcNameToQuery );
 
             /* Search the delayed lists. */
             if( pxTCB == NULL )
@@ -4511,11 +4504,7 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery )
             {
                 /* Fill in an TaskStatus_t structure with information on each
                  * task in the Ready state. */
-                do
-                {
-                    uxQueue--;
-                    uxTask = ( UBaseType_t ) ( uxTask + prvListTasksWithinSingleList( &( pxTaskStatusArray[ uxTask ] ), &( pxReadyTasksLists[ uxQueue ] ), eReady ) );
-                } while( uxQueue > ( UBaseType_t ) tskIDLE_PRIORITY );
+                uxTask = ( UBaseType_t ) ( uxTask + prvListTasksWithinSingleList( &( pxTaskStatusArray[ uxTask ] ), &( xReadyTaskListLLREF ), eReady ) );
 
                 /* Fill in an TaskStatus_t structure with information on each
                  * task in the Blocked state. */
@@ -4921,7 +4910,7 @@ BaseType_t xTaskIncrementTick( void )
         {
             #if ( configNUMBER_OF_CORES == 1 )
             {
-                if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ pxCurrentTCB->uxPriority ] ) ) > 1U )
+                if( listCURRENT_LIST_LENGTH( &( xReadyTaskListLLREF ) ) > 1U )
                 {
                     xSwitchRequired = pdTRUE;
                 }
@@ -6129,11 +6118,7 @@ static void prvInitialiseTaskLists( void )
 {
     UBaseType_t uxPriority;
 
-    for( uxPriority = ( UBaseType_t ) 0U; uxPriority < ( UBaseType_t ) configMAX_PRIORITIES; uxPriority++ )
-    {
-        vListInitialise( &( pxReadyTasksLists[ uxPriority ] ) );
-    }
-
+    vListInitialise( &xReadyTaskListLLREF );
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );
     vListInitialise( &xPendingReadyList );

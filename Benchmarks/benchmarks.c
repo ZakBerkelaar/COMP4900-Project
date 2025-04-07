@@ -8,15 +8,6 @@
 #include <stdatomic.h>
 #include "benchmarks.h"
 
-typedef struct tskTaskControlBlock
-{
-    // Only the LLREF fields you added
-    TickType_t xWCET;
-    TickType_t xRemainingExecutionTime;
-    TickType_t xWindowStartTime;
-    TickType_t xLocalDeadline;
-} TCB_t;
-
 #define BENCHMARK_WORKERS 8
 #define MAX_EVENTS_PER_QUEUE 64
 #define TASK_CREATION_COUNT 255
@@ -84,6 +75,7 @@ void push_event(Event* event)
 
 static void benchmark_worker(void* data)
 {
+    printf("task started\n");
     Event e;
     BenchmarkData* bData = (BenchmarkData*)data;
     const uint32_t cycles = bData->runtime * 250000;
@@ -94,7 +86,7 @@ static void benchmark_worker(void* data)
     push_event(&e);
 
     volatile uint8_t dummy = 0;
-    for(uint32_t i; i < cycles; ++i)
+    for(uint32_t i=0; i < cycles; ++i)
     {
         dummy += (uint8_t)i;
     }
@@ -103,6 +95,8 @@ static void benchmark_worker(void* data)
     e.time = get_current_time();
     e.data.finished.worker_id = bData->id;
     push_event(&e);
+
+    printf("task ended\n");
 
     // Let the watcher know we are done here
     xEventGroupSetBits(finished_event, 1 << bData->id);
@@ -163,11 +157,11 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
     );
 
 #ifdef SCHED_LLREF
-    TCB_t *pxTCB = (TCB_t *) handle;
-    pxTCB->xWCET = pdMS_TO_TICKS(wcets[id]); // e.g. 5 ms
-    pxTCB->xRemainingExecutionTime = pxTCB->xWCET;
-    pxTCB->xWindowStartTime = xTaskGetTickCount();
-    pxTCB->xLocalDeadline = pxTCB->xWindowStartTime + pdMS_TO_TICKS(windowLengths[id]);
+    // take handle and use the public set fns
+    pubSetxWCET(handle, pdMS_TO_TICKS(wcets[id])); // e.g. 5 
+    pubSetxRemainingExecutionTime(handle, pubGetxWCET(handle));
+    pubSetxWindowStartTime(handle, xTaskGetTickCount());
+    pubSetxLocalDeadline(handle, pubGetxWindowStartTime(handle) + pdMS_TO_TICKS(windowLengths[id]));
 #endif 
 
 }
@@ -263,7 +257,7 @@ void run_benchmarks(void)
 
     for(int i = 0; i < BENCHMARK_WORKERS; ++i)
     {
-        create_benchmark_task(i, 0, 2000);
+        create_benchmark_task(i, 0, 20);
     }
 
     // All tasks arrive at the same time
