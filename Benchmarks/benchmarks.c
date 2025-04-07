@@ -8,6 +8,15 @@
 #include <stdatomic.h>
 #include "benchmarks.h"
 
+typedef struct tskTaskControlBlock
+{
+    // Only the LLREF fields you added
+    TickType_t xWCET;
+    TickType_t xRemainingExecutionTime;
+    TickType_t xWindowStartTime;
+    TickType_t xLocalDeadline;
+} TCB_t;
+
 #define BENCHMARK_WORKERS 8
 #define MAX_EVENTS_PER_QUEUE 64
 #define TASK_CREATION_COUNT 255
@@ -115,6 +124,17 @@ static TickType_t deadlines[BENCHMARK_WORKERS] =
 };
 #endif
 
+#ifdef SCHED_LLREF
+//Optional: define WCETs and deadlines if you want them dynamic
+static TickType_t wcets[BENCHMARK_WORKERS] = {
+    5, 4, 6, 2, 1, 2, 3, 4 // in ms
+};
+
+static TickType_t windowLengths[BENCHMARK_WORKERS] = {
+    20, 20, 20, 20, 20, 20, 20, 20 // all same for now
+};
+#endif
+
 void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
 {
     BenchmarkData* data = &worker_data[id];
@@ -127,7 +147,7 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
 
     snprintf(name, sizeof(name), "BWorker%d", id);
 
-    xTaskCreateStatic(
+    TaskHandle_t handle = xTaskCreateStatic(
         benchmark_worker,
         name,
         sizeof(worker_stacks[0]) / sizeof(worker_stacks[0][0]),
@@ -137,9 +157,19 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
 #else
         4,
 #endif
+
         &worker_stacks[id][0],
         &worker_data[id].tcb
     );
+
+#ifdef SCHED_LLREF
+    TCB_t *pxTCB = (TCB_t *) handle;
+    pxTCB->xWCET = pdMS_TO_TICKS(wcets[id]); // e.g. 5 ms
+    pxTCB->xRemainingExecutionTime = pxTCB->xWCET;
+    pxTCB->xWindowStartTime = xTaskGetTickCount();
+    pxTCB->xLocalDeadline = pxTCB->xWindowStartTime + pdMS_TO_TICKS(windowLengths[id]);
+#endif 
+
 }
 
 void watcher(void* args)
