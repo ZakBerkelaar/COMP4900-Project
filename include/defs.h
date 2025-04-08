@@ -1,7 +1,7 @@
 #ifndef DEFS_H
 #define DEFS_H
 
-#define USE_SMP
+//#define USE_SMP
 
 extern void app_abort(void);
 

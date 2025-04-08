@@ -12,7 +12,7 @@ endif()
 if(${PLATFORM} STREQUAL "rpi")
     include(pico-sdk/pico_sdk_init.cmake)
 
-    set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-EDF")
+    set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-LLREF")
     include(FreeRTOS_Kernel_import.cmake)
 endif()
 
@@ -113,11 +113,12 @@ target_link_libraries(llref PRIVATE common)
 
 if(${PLATFORM} STREQUAL "rpi")
     target_link_libraries(edf PRIVATE pico_stdlib FreeRTOS-Kernel)
+    target_link_libraries(llref PRIVATE pico_stdlib FreeRTOS-Kernel)
 
     pico_enable_stdio_usb(edf 1)
     pico_enable_stdio_uart(edf 0)
-    #pico_enable_stdio_usb(llref 1)
-    #pico_enable_stdio_uart(llref 0)
+    pico_enable_stdio_usb(llref 1)
+    pico_enable_stdio_uart(llref 0)
     pico_add_extra_outputs(edf)
     pico_add_extra_outputs(llref)
 endif()

@@ -76,10 +76,10 @@ void push_event(Event* event)
 
 static void benchmark_worker(void* data)
 {
-    printf("task started\n");
     Event e;
     BenchmarkData* bData = (BenchmarkData*)data;
     const uint32_t cycles = bData->runtime * 250000;
+    printf("Task %d started\n", bData->id);
 
     e.type = e_TaskStarted;
     e.time = get_current_time();
@@ -97,7 +97,8 @@ static void benchmark_worker(void* data)
     e.data.finished.worker_id = bData->id;
     push_event(&e);
 
-    printf("task ended\n");
+    TickType_t remaining = pubGetxRemainingExecutionTime(xTaskGetCurrentTaskHandle());
+    printf("Task %d ended with %d remaining\n", bData->id, remaining);
 
     // Let the watcher know we are done here
     xEventGroupSetBits(finished_event, 1 << bData->id);
@@ -119,14 +120,29 @@ static TickType_t deadlines[BENCHMARK_WORKERS] =
 };
 #endif
 
-#ifdef SCHED_LLREF
-//Optional: define WCETs and deadlines if you want them dynamic
-static TickType_t wcets[BENCHMARK_WORKERS] = {
-    5, 4, 6, 2, 1, 2, 3, 4 // in ms
+#if defined PLATFORM_RPI
+static TickType_t execution_times[BENCHMARK_WORKERS] = 
+{
+    11802,
+    18165,
+    16107,
+    18375,
+    4977,
+    14196,
+    4137,
+    18837
 };
-
-static TickType_t windowLengths[BENCHMARK_WORKERS] = {
-    20, 20, 20, 20, 20, 20, 20, 20 // all same for now
+#elif defined PLATFORM_QEMU
+static TickType_t execution_times[BENCHMARK_WORKERS] = 
+{
+    36,
+    74,
+    54,
+    11,
+    79,
+    12,
+    57,
+    89
 };
 #endif
 
@@ -147,8 +163,10 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
         name,
         sizeof(worker_stacks[0]) / sizeof(worker_stacks[0][0]),
         data,
-#ifdef SCHED_EDF
+#if defined SCHED_EDF
         deadlines[id],
+#elif defined SCHED_LLREF
+        execution_times[id], 
 #else
         4,
 #endif
@@ -156,15 +174,6 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
         &worker_stacks[id][0],
         &worker_data[id].tcb
     );
-
-#ifdef SCHED_LLREF
-    // take handle and use the public set fns
-    pubSetxWCET(handle, pdMS_TO_TICKS(wcets[id])); // e.g. 5 
-    pubSetxRemainingExecutionTime(handle, pubGetxWCET(handle));
-    pubSetxWindowStartTime(handle, xTaskGetTickCount());
-    pubSetxLocalDeadline(handle, pubGetxWindowStartTime(handle) + pdMS_TO_TICKS(windowLengths[id]));
-#endif 
-
 }
 
 void watcher(void* args)
@@ -251,14 +260,28 @@ void run_benchmarks(void)
         "Watcher",
         sizeof(watcher_stack) / sizeof(watcher_stack[0]),
         NULL,
+#if defined SCHED_LLREF
+        (TickType_t)-1, // Big number so it runs first
+#else // EDf
         0, // Deadline 0 to make it run first
+#endif
         watcher_stack,
         &watcher_tcb
     );
 
     for(int i = 0; i < BENCHMARK_WORKERS; ++i)
     {
-        create_benchmark_task(i, 0, 20);
+        // We can do about 21 cycles every tick on the rpi
+        // We can do about 2 cycles every tick on qemu
+        // These both assume no execessive logging
+
+        #if defined PLATFORM_QEMU
+        uint32_t divisor = 1;
+        #elif defined PLATFORM_RPI
+        uint32_t divisor = 19;
+        #endif
+
+        create_benchmark_task(i, 0, execution_times[i] / divisor);
     }
 
     // All tasks arrive at the same time

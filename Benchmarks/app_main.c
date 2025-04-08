@@ -56,5 +56,5 @@ void print_new_task(void)
     TaskHandle_t newTask = xTaskGetCurrentTaskHandle();
     const char* name = pcTaskGetName(newTask);
 
-    printf("Switching in %s\n", name);
+    printf("Core0 %d | %s\n", xTaskGetTickCount(), name);
 }

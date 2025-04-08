@@ -513,7 +513,7 @@ typedef enum
                                     const char * const pcName,
                                     const configSTACK_DEPTH_TYPE uxStackDepth,
                                     void * const pvParameters,
-                                    UBaseType_t uxPriority,
+                                    TickType_t uxRemainingTime,
                                     StackType_t * const puxStackBuffer,
                                     StaticTask_t * const pxTaskBuffer ) PRIVILEGED_FUNCTION;
 #endif /* configSUPPORT_STATIC_ALLOCATION */
@@ -3634,16 +3634,7 @@ BaseType_t xTaskPriorityInherit( TaskHandle_t const pxMutexHolder ) PRIVILEGED_F
  */
 BaseType_t xTaskPriorityDisinherit( TaskHandle_t const pxMutexHolder ) PRIVILEGED_FUNCTION;
 
-
-void pubSetxWCET(TaskHandle_t, TickType_t);
-TickType_t pubGetxWCET(TaskHandle_t);
-void pubSetxRemainingExecutionTime(TaskHandle_t, TickType_t);
 TickType_t pubGetxRemainingExecutionTime(TaskHandle_t);
-void pubSetxLocalDeadline(TaskHandle_t, TickType_t);
-TickType_t pubGetxLocalDeadline(TaskHandle_t);
-void pubSetxWindowStartTime(TaskHandle_t, TickType_t);
-TickType_t pubGetxWindowStartTime(TaskHandle_t);
-
 
 /*
  * If a higher priority task attempting to obtain a mutex caused a lower
