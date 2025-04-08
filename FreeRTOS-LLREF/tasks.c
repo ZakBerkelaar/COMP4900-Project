@@ -472,7 +472,9 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Ta
 
 PRIVILEGED_DATA static TickType_t ulSwitchInTimeLLREF[ configNUMBER_OF_CORES ];
 
+#if configNUMBER_OF_CORES == 1
 static TCB_t *pxSelectLLREFTask(void);
+#endif
 
 #if ( INCLUDE_vTaskDelete == 1 )
 
@@ -542,21 +544,30 @@ PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime[ conf
  */
 
 TickType_t pubGetxRemainingExecutionTime(TaskHandle_t handle) {
+    TCB_t* pxTCB = prvGetTCBFromHandle( handle );
 #if configNUMBER_OF_CORES == 1
-    TCB_t* tcb = prvGetTCBFromHandle( handle );
 
-    if( tcb == pxCurrentTCB )
+    if( pxTCB == pxCurrentTCB )
     {
         // It is currently running, we must calculate the remaining time as it has not been updated
-        return tcb->xRemainingExecutionTime - ( xTickCount - ulSwitchInTimeLLREF[ 0 ] );
+        return pxTCB->xRemainingExecutionTime - ( xTickCount - ulSwitchInTimeLLREF[ 0 ] );
     }
     else
     {
         // We can used the saved time
-        return tcb->xRemainingExecutionTime;
+        return pxTCB->xRemainingExecutionTime;
     }
 #else
-#error TODO SMP
+    if( taskTASK_IS_RUNNING( pxTCB ) == pdTRUE )
+    {
+        // We need to calculate it's remaining time
+        return pxTCB->xRemainingExecutionTime - ( xTickCount - ulSwitchInTimeLLREF[ pxTCB->xTaskRunState ] );
+    }
+    else
+    {
+        // Not running use saved time
+        return pxTCB->xRemainingExecutionTime;
+    }
 #endif
 }
 
@@ -1034,247 +1045,106 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         /* This function should be called when scheduler is running. */
         configASSERT( xSchedulerRunning == pdTRUE );
 
-        /* A new task is created and a running task with the same priority yields
-         * itself to run the new task. When a running task yields itself, it is still
-         * in the ready list. This running task will be selected before the new task
-         * since the new task is always added to the end of the ready list.
-         * The other problem is that the running task still in the same position of
-         * the ready list when it yields itself. It is possible that it will be selected
-         * earlier then other tasks which waits longer than this task.
-         *
-         * To fix these problems, the running task should be put to the end of the
-         * ready list before searching for the ready task in the ready list. */
-        if( listIS_CONTAINED_WITHIN( &( pxReadyTasksLists[ pxCurrentTCBs[ xCoreID ]->uxPriority ] ),
-                                     &pxCurrentTCBs[ xCoreID ]->xStateListItem ) == pdTRUE )
+        const ListItem_t * pxEndMarker = listGET_END_MARKER( &xReadyTaskListLLREF );
+        ListItem_t * pxIterator;
+
+        for( pxIterator = listGET_HEAD_ENTRY( &xReadyTaskListLLREF ); pxIterator != pxEndMarker; pxIterator = listGET_NEXT( pxIterator ) )
         {
-            ( void ) uxListRemove( &pxCurrentTCBs[ xCoreID ]->xStateListItem );
-            vListInsertEnd( &( pxReadyTasksLists[ pxCurrentTCBs[ xCoreID ]->uxPriority ] ),
-                            &pxCurrentTCBs[ xCoreID ]->xStateListItem );
-        }
+            pxTCB = ( TCB_t* )listGET_LIST_ITEM_OWNER( pxIterator );
 
-        while( xTaskScheduled == pdFALSE )
-        {
-            #if ( configRUN_MULTIPLE_PRIORITIES == 0 )
+            if( pxTCB->xTaskRunState == taskTASK_NOT_RUNNING )
             {
-                if( uxCurrentPriority < uxTopReadyPriority )
+                // The task is not currently on any core
+                if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
                 {
-                    /* We can't schedule any tasks, other than idle, that have a
-                     * priority lower than the priority of a task currently running
-                     * on another core. */
-                    uxCurrentPriority = tskIDLE_PRIORITY;
+                    // We're allowed to run it
+                    pxCurrentTCBs[ xCoreID ]->xTaskRunState = taskTASK_NOT_RUNNING;
+                    pxPreviousTCB = pxCurrentTCBs[ xCoreID ];
+                    pxTCB->xTaskRunState = xCoreID;
+                    pxCurrentTCBs[ xCoreID ] = pxTCB;
+                    xTaskScheduled = pdTRUE;
                 }
             }
-            #endif
-
-            if( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxCurrentPriority ] ) ) == pdFALSE )
+            else if( pxTCB == pxCurrentTCBs[ xCoreID ] )
             {
-                const List_t * const pxReadyList = &( pxReadyTasksLists[ uxCurrentPriority ] );
-                const ListItem_t * pxEndMarker = listGET_END_MARKER( pxReadyList );
-                ListItem_t * pxIterator;
-
-                /* The ready task list for uxCurrentPriority is not empty, so uxTopReadyPriority
-                 * must not be decremented any further. */
-                xDecrementTopPriority = pdFALSE;
-
-                for( pxIterator = listGET_HEAD_ENTRY( pxReadyList ); pxIterator != pxEndMarker; pxIterator = listGET_NEXT( pxIterator ) )
+                // Task is already running so mark it as scheduled
+                if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
                 {
-                    /* MISRA Ref 11.5.3 [Void pointer assignment] */
-                    /* More details at: https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/MISRA.md#rule-115 */
-                    /* coverity[misra_c_2012_rule_11_5_violation] */
-                    pxTCB = ( TCB_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
-
-                    #if ( configRUN_MULTIPLE_PRIORITIES == 0 )
-                    {
-                        /* When falling back to the idle priority because only one priority
-                         * level is allowed to run at a time, we should ONLY schedule the true
-                         * idle tasks, not user tasks at the idle priority. */
-                        if( uxCurrentPriority < uxTopReadyPriority )
-                        {
-                            if( ( pxTCB->uxTaskAttributes & taskATTRIBUTE_IS_IDLE ) == 0U )
-                            {
-                                continue;
-                            }
-                        }
-                    }
-                    #endif /* #if ( configRUN_MULTIPLE_PRIORITIES == 0 ) */
-
-                    if( pxTCB->xTaskRunState == taskTASK_NOT_RUNNING )
-                    {
-                        #if ( configUSE_CORE_AFFINITY == 1 )
-                            if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
-                        #endif
-                        {
-                            /* If the task is not being executed by any core swap it in. */
-                            pxCurrentTCBs[ xCoreID ]->xTaskRunState = taskTASK_NOT_RUNNING;
-                            #if ( configUSE_CORE_AFFINITY == 1 )
-                                pxPreviousTCB = pxCurrentTCBs[ xCoreID ];
-                            #endif
-                            pxTCB->xTaskRunState = xCoreID;
-                            pxCurrentTCBs[ xCoreID ] = pxTCB;
-                            xTaskScheduled = pdTRUE;
-                        }
-                    }
-                    else if( pxTCB == pxCurrentTCBs[ xCoreID ] )
-                    {
-                        configASSERT( ( pxTCB->xTaskRunState == xCoreID ) || ( pxTCB->xTaskRunState == taskTASK_SCHEDULED_TO_YIELD ) );
-
-                        #if ( configUSE_CORE_AFFINITY == 1 )
-                            if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
-                        #endif
-                        {
-                            /* The task is already running on this core, mark it as scheduled. */
-                            pxTCB->xTaskRunState = xCoreID;
-                            xTaskScheduled = pdTRUE;
-                        }
-                    }
-                    else
-                    {
-                        /* This task is running on the core other than xCoreID. */
-                        mtCOVERAGE_TEST_MARKER();
-                    }
-
-                    if( xTaskScheduled != pdFALSE )
-                    {
-                        /* A task has been selected to run on this core. */
-                        break;
-                    }
+                    pxTCB->xTaskRunState = xCoreID;
+                    xTaskScheduled = pdTRUE;
                 }
-            }
-            else
-            {
-                if( xDecrementTopPriority != pdFALSE )
-                {
-                    uxTopReadyPriority--;
-                    #if ( configRUN_MULTIPLE_PRIORITIES == 0 )
-                    {
-                        xPriorityDropped = pdTRUE;
-                    }
-                    #endif
-                }
-            }
-
-            /* There are configNUMBER_OF_CORES Idle tasks created when scheduler started.
-             * The scheduler should be able to select a task to run when uxCurrentPriority
-             * is tskIDLE_PRIORITY. uxCurrentPriority is never decreased to value blow
-             * tskIDLE_PRIORITY. */
-            if( uxCurrentPriority > tskIDLE_PRIORITY )
-            {
-                uxCurrentPriority--;
-            }
-            else
-            {
-                /* This function is called when idle task is not created. Break the
-                 * loop to prevent uxCurrentPriority overrun. */
-                break;
             }
         }
-
-        #if ( configRUN_MULTIPLE_PRIORITIES == 0 )
+        
+        // Do the same thing again but for the idle tasks
+        if( xTaskScheduled == pdFALSE )
         {
-            if( xTaskScheduled == pdTRUE )
-            {
-                if( xPriorityDropped != pdFALSE )
-                {
-                    /* There may be several ready tasks that were being prevented from running because there was
-                     * a higher priority task running. Now that the last of the higher priority tasks is no longer
-                     * running, make sure all the other idle tasks yield. */
-                    BaseType_t x;
+            pxEndMarker = listGET_END_MARKER( &xReadyIdleTasks );
 
-                    for( x = ( BaseType_t ) 0; x < ( BaseType_t ) configNUMBER_OF_CORES; x++ )
+            for( pxIterator = listGET_HEAD_ENTRY( &xReadyIdleTasks ); pxIterator != pxEndMarker; pxIterator = listGET_NEXT( pxIterator ) )
+            {
+                pxTCB = ( TCB_t* )listGET_LIST_ITEM_OWNER( pxIterator );
+
+                if( pxTCB->xTaskRunState == taskTASK_NOT_RUNNING )
+                {
+                    // The task is not currently on any core
+                    if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
                     {
-                        if( ( pxCurrentTCBs[ x ]->uxTaskAttributes & taskATTRIBUTE_IS_IDLE ) != 0U )
-                        {
-                            prvYieldCore( x );
-                        }
+                        // We're allowed to run it
+                        pxCurrentTCBs[ xCoreID ]->xTaskRunState = taskTASK_NOT_RUNNING;
+                        pxPreviousTCB = pxCurrentTCBs[ xCoreID ];
+                        pxTCB->xTaskRunState = xCoreID;
+                        pxCurrentTCBs[ xCoreID ] = pxTCB;
+                        xTaskScheduled = pdTRUE;
+                    }
+                }
+                else if( pxTCB == pxCurrentTCBs[ xCoreID ] )
+                {
+                    // Task is already running so mark it as scheduled
+                    if( ( pxTCB->uxCoreAffinityMask & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
+                    {
+                        pxTCB->xTaskRunState = xCoreID;
+                        xTaskScheduled = pdTRUE;
                     }
                 }
             }
         }
-        #endif /* #if ( configRUN_MULTIPLE_PRIORITIES == 0 ) */
 
         #if ( configUSE_CORE_AFFINITY == 1 )
         {
             if( xTaskScheduled == pdTRUE )
             {
-                if( ( pxPreviousTCB != NULL ) && ( listIS_CONTAINED_WITHIN( &( pxReadyTasksLists[ pxPreviousTCB->uxPriority ] ), &( pxPreviousTCB->xStateListItem ) ) != pdFALSE ) )
+                if( ( pxPreviousTCB != NULL ) && ( listIS_CONTAINED_WITHIN( &xReadyTaskListLLREF, &( pxPreviousTCB->xStateListItem ) ) != pdFALSE ) )
                 {
                     /* A ready task was just evicted from this core. See if it can be
                      * scheduled on any other core. */
                     UBaseType_t uxCoreMap = pxPreviousTCB->uxCoreAffinityMask;
-                    BaseType_t xLowestPriority = ( BaseType_t ) pxPreviousTCB->uxPriority;
-                    BaseType_t xLowestPriorityCore = -1;
+                    TickType_t xLowestExecutionTime = pxPreviousTCB->xRemainingExecutionTime;
+                    BaseType_t xLowestExecutionTimeCore = -1;
                     BaseType_t x;
-
-                    if( ( pxPreviousTCB->uxTaskAttributes & taskATTRIBUTE_IS_IDLE ) != 0U )
-                    {
-                        xLowestPriority = xLowestPriority - 1;
-                    }
-
-                    if( ( uxCoreMap & ( ( UBaseType_t ) 1U << ( UBaseType_t ) xCoreID ) ) != 0U )
-                    {
-                        /* pxPreviousTCB was removed from this core and this core is not excluded
-                         * from it's core affinity mask.
-                         *
-                         * pxPreviousTCB is preempted by the new higher priority task
-                         * pxCurrentTCBs[ xCoreID ]. When searching a new core for pxPreviousTCB,
-                         * we do not need to look at the cores on which pxCurrentTCBs[ xCoreID ]
-                         * is allowed to run. The reason is - when more than one cores are
-                         * eligible for an incoming task, we preempt the core with the minimum
-                         * priority task. Because this core (i.e. xCoreID) was preempted for
-                         * pxCurrentTCBs[ xCoreID ], this means that all the others cores
-                         * where pxCurrentTCBs[ xCoreID ] can run, are running tasks with priority
-                         * no lower than pxPreviousTCB's priority. Therefore, the only cores where
-                         * which can be preempted for pxPreviousTCB are the ones where
-                         * pxCurrentTCBs[ xCoreID ] is not allowed to run (and obviously,
-                         * pxPreviousTCB is allowed to run).
-                         *
-                         * This is an optimization which reduces the number of cores needed to be
-                         * searched for pxPreviousTCB to run. */
-                        uxCoreMap &= ~( pxCurrentTCBs[ xCoreID ]->uxCoreAffinityMask );
-                    }
-                    else
-                    {
-                        /* pxPreviousTCB's core affinity mask is changed and it is no longer
-                         * allowed to run on this core. Searching all the cores in pxPreviousTCB's
-                         * new core affinity mask to find a core on which it can run. */
-                    }
-
-                    uxCoreMap &= ( ( 1U << configNUMBER_OF_CORES ) - 1U );
 
                     for( x = ( ( BaseType_t ) configNUMBER_OF_CORES - 1 ); x >= ( BaseType_t ) 0; x-- )
                     {
                         UBaseType_t uxCore = ( UBaseType_t ) x;
-                        BaseType_t xTaskPriority;
+                        TickType_t xExecutionTime;
 
-                        if( ( uxCoreMap & ( ( UBaseType_t ) 1U << uxCore ) ) != 0U )
+                        if( uxCoreMap & ( ( UBaseType_t ) 1U << uxCore ) == 0 )
+                            continue; // The task is not allowed to run on this core
+
+                        xExecutionTime = pxCurrentTCBs[ uxCore ]->xRemainingExecutionTime;
+
+                        if( ( xExecutionTime < xLowestExecutionTime ) &&
+                            ( taskTASK_IS_RUNNING( pxCurrentTCBs[ uxCore ] ) != pdFALSE ) &&
+                            ( xYieldPendings[ uxCore ] == pdFALSE ) )
                         {
-                            xTaskPriority = ( BaseType_t ) pxCurrentTCBs[ uxCore ]->uxPriority;
-
-                            if( ( pxCurrentTCBs[ uxCore ]->uxTaskAttributes & taskATTRIBUTE_IS_IDLE ) != 0U )
-                            {
-                                xTaskPriority = xTaskPriority - ( BaseType_t ) 1;
-                            }
-
-                            uxCoreMap &= ~( ( UBaseType_t ) 1U << uxCore );
-
-                            if( ( xTaskPriority < xLowestPriority ) &&
-                                ( taskTASK_IS_RUNNING( pxCurrentTCBs[ uxCore ] ) != pdFALSE ) &&
-                                ( xYieldPendings[ uxCore ] == pdFALSE ) )
-                            {
-                                #if ( configUSE_TASK_PREEMPTION_DISABLE == 1 )
-                                    if( pxCurrentTCBs[ uxCore ]->xPreemptionDisable == pdFALSE )
-                                #endif
-                                {
-                                    xLowestPriority = xTaskPriority;
-                                    xLowestPriorityCore = ( BaseType_t ) uxCore;
-                                }
-                            }
-                        }
+                            xLowestExecutionTime = xExecutionTime;
+                            xLowestExecutionTimeCore = (BaseType_t)uxCore;
+                        } 
                     }
 
-                    if( xLowestPriorityCore >= 0 )
+                    if( xLowestExecutionTimeCore >= 0 )
                     {
-                        prvYieldCore( xLowestPriorityCore );
+                        prvYieldCore( xLowestExecutionTimeCore );
                     }
                 }
             }
@@ -1827,6 +1697,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION */
 /*-----------------------------------------------------------*/
 
+#if configNUMBER_OF_CORES == 1
 static TCB_t *pxSelectLLREFTask(void)
 {
     TCB_t *pxBestTask = NULL;
@@ -1854,15 +1725,12 @@ static TCB_t *pxSelectLLREFTask(void)
     // No task found, look for the idle task
     if( pxBestTask == NULL )
     {
-#if configNUMBER_OF_CORES == 1
         pxBestTask = ( TCB_t* )listGET_OWNER_OF_HEAD_ENTRY( &xReadyIdleTasks );
-#else
-#error TODO
-#endif
     }
 
     return pxBestTask;
 }
+#endif
 
 
 static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
@@ -4886,10 +4754,8 @@ BaseType_t xTaskIncrementTick( void )
             }
         }
 
-        // TODO: Switch out for LLREF
+#if configNUMBER_OF_CORES == 1
         xCurrentRemainingTime = pxCurrentTCB->xRemainingExecutionTime - ( xConstTickCount - ulSwitchInTimeLLREF[ 0 ] );
-
-        //printf("Time %s: %u/%u\n", pxCurrentTCB->pcTaskName, xCurrentRemainingTime, pxCurrentTCB->xRemainingExecutionTime);
 
         if( listCURRENT_LIST_LENGTH( &xReadyTaskListLLREF ) > 1U )
         {
@@ -4908,13 +4774,31 @@ BaseType_t xTaskIncrementTick( void )
                 xSwitchRequired = pdTRUE;
             }
         }
+#else
+        for ( xCoreID = 0; xCoreID < ( ( BaseType_t ) configNUMBER_OF_CORES ); xCoreID++ )
+        {
+            xCurrentRemainingTime = pxCurrentTCBs[ xCoreID ]->xRemainingExecutionTime - ( xConstTickCount - ulSwitchInTimeLLREF[ xCoreID ] );
 
-        // for ( xCoreID = 0; xCoreID < ( ( BaseType_t ) configNUMBER_OF_CORES ); xCoreID++ )
-        // {
-        //     TickType_t xCurrentRemainingTime;
+            if( listCURRENT_LIST_LENGTH( &xReadyTaskListLLREF ) > 1U )
+            {
+                // Let's see if there is another unscheduled task with a higher execution time
 
-        //     xCurrentRemainingTime = ulSwitchInTimeLLREF[ xCoreID ] - pxCurrentTCB
-        // }
+                const ListItem_t * pxEndMarker = listGET_END_MARKER( &xReadyTaskListLLREF );
+                ListItem_t * pxIterator;
+
+                for( pxIterator = listGET_HEAD_ENTRY( &xReadyTaskListLLREF ); pxIterator != pxEndMarker; pxIterator = listGET_NEXT( pxIterator ) )
+                {
+                    pxTCB = ( TCB_t* )listGET_LIST_ITEM_OWNER( pxIterator );
+
+                    if( pxTCB->xRemainingExecutionTime > xCurrentRemainingTime &&
+                        taskTASK_IS_RUNNING( pxTCB ) != pdTRUE )
+                    {
+                        xYieldPendings[ xCoreID ] = pdTRUE; // This core should switch to the highest remaining execution time
+                    }
+                }
+            }
+        }
+#endif
 
         #if ( configUSE_TICK_HOOK == 1 )
         {
@@ -5248,6 +5132,8 @@ BaseType_t xTaskIncrementTick( void )
 #else /* if ( configNUMBER_OF_CORES == 1 ) */
     void vTaskSwitchContext( BaseType_t xCoreID )
     {
+        TickType_t xCurrentTime;
+
         traceENTER_vTaskSwitchContext();
 
         /* Acquire both locks:
@@ -5304,6 +5190,31 @@ BaseType_t xTaskIncrementTick( void )
                     ulTaskSwitchedInTime[ xCoreID ] = ulTotalRunTime[ xCoreID ];
                 }
                 #endif /* configGENERATE_RUN_TIME_STATS */
+
+                xCurrentTime = xTaskGetTickCount();
+                if( xCurrentTime > ulSwitchInTimeLLREF[ xCoreID ] )
+                {
+                    if( pxCurrentTCBs[ xCoreID ]->xRemainingExecutionTime > ( xCurrentTime - ulSwitchInTimeLLREF[ xCoreID ] ) )
+                    {
+                        pxCurrentTCBs[ xCoreID ]->xRemainingExecutionTime -= ( xCurrentTime - ulSwitchInTimeLLREF[ xCoreID ] );
+                    }
+                    else
+                    {
+                        pxCurrentTCBs[ xCoreID ]->xRemainingExecutionTime = 0; // We would underflow
+                    }
+
+                    // Same stupid things as last time
+                    if ( listIS_CONTAINED_WITHIN( &xReadyTaskListLLREF, &( pxCurrentTCBs[ xCoreID ]->xStateListItem ) ) != pdFALSE )
+                    {
+                        // Remove from the ready list
+                        listREMOVE_ITEM( &( pxCurrentTCBs[ xCoreID ]->xStateListItem ) );
+                        // Update the value
+                        listSET_LIST_ITEM_VALUE( &( pxCurrentTCBs[ xCoreID ]->xStateListItem ), (TickType_t)-1 - pxCurrentTCBs[ xCoreID ]->xRemainingExecutionTime );
+                        // Add it back
+                        vListInsert( &xReadyTaskListLLREF, &( pxCurrentTCBs[ xCoreID ]->xStateListItem ) );
+                    }
+                }
+                ulSwitchInTimeLLREF[ xCoreID ] = xCurrentTime;
 
                 /* Check for stack overflow, if configured. */
                 taskCHECK_FOR_STACK_OVERFLOW();
