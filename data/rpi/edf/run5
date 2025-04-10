@@ -1,0 +1,49 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2025.04.09 01:31:55 =~=~=~=~=~=~=~=~=~=~=~=
+Running on rpi without SMP
+We are running edf
+Task 4 started
+Task 4 ended
+Task 5 started
+Task 5 ended
+Task 3 started
+Task 3 ended
+Task 6 started
+Task 6 ended
+Task 1 started
+Task 1 ended
+Task 7 started
+Task 7 ended
+Task 2 started
+Task 2 ended
+Task 0 started
+Task 0 ended
+All tasks done
+20 context switches occured
+Total events: 24
+---OUTPUT START---
+14413 ms | ARRIVE task0
+14413 ms | ARRIVE task1
+14413 ms | ARRIVE task2
+14413 ms | ARRIVE task3
+14413 ms | ARRIVE task4
+14413 ms | ARRIVE task5
+14413 ms | ARRIVE task6
+14413 ms | ARRIVE task7
+14414 ms | START task4
+19117 ms | END task4
+19117 ms | START task5
+32577 ms | END task5
+32578 ms | START task3
+50002 ms | END task3
+50002 ms | START task6
+53913 ms | END task6
+53913 ms | START task1
+71139 ms | END task1
+71140 ms | START task7
+88997 ms | END task7
+88997 ms | START task2
+104259 ms | END task2
+104260 ms | START task0
+115449 ms | END task0
+----OUTPUT END----
+App aborted

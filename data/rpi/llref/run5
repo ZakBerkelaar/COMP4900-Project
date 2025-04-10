@@ -1,0 +1,49 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2025.04.09 13:20:08 =~=~=~=~=~=~=~=~=~=~=~=
+Running on rpi without SMP
+We are running llref
+Task 7 started
+Task 3 started
+Task 1 started
+Task 2 started
+Task 5 started
+Task 0 started
+Task 4 started
+Task 6 started
+Task 7 ended with 921 remaining
+Task 3 ended with 892 remaining
+Task 1 ended with 880 remaining
+Task 2 ended with 791 remaining
+Task 5 ended with 687 remaining
+Task 0 ended with 572 remaining
+Task 4 ended with 257 remaining
+Task 6 ended with 211 remaining
+All tasks done
+82772 context switches occured
+Total events: 24
+---OUTPUT START---
+12798 ms | ARRIVE task0
+12798 ms | ARRIVE task1
+12798 ms | ARRIVE task2
+12798 ms | ARRIVE task3
+12798 ms | ARRIVE task4
+12798 ms | ARRIVE task5
+12798 ms | ARRIVE task6
+12798 ms | ARRIVE task7
+12799 ms | START task7
+13261 ms | START task3
+13681 ms | START task1
+19855 ms | START task2
+27499 ms | START task5
+39469 ms | START task0
+80419 ms | START task4
+86299 ms | START task6
+112030 ms | END task7
+112231 ms | END task3
+112301 ms | END task1
+112748 ms | END task2
+113163 ms | END task5
+113509 ms | END task0
+114138 ms | END task4
+114184 ms | END task6
+----OUTPUT END----
+App aborted

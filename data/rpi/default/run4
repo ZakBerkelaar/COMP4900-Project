@@ -1,0 +1,49 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2025.04.09 13:59:08 =~=~=~=~=~=~=~=~=~=~=~=
+Running on rpi without SMP
+We are running default
+Task 0 started
+Task 1 started
+Task 2 started
+Task 3 started
+Task 4 started
+Task 5 started
+Task 6 started
+Task 7 started
+Task 6 ended
+Task 4 ended
+Task 0 ended
+Task 5 ended
+Task 2 ended
+Task 1 ended
+Task 3 ended
+Task 7 ended
+All tasks done
+101011 context switches occured
+Total events: 24
+---OUTPUT START---
+12581 ms | ARRIVE task0
+12581 ms | ARRIVE task1
+12581 ms | ARRIVE task2
+12581 ms | ARRIVE task3
+12581 ms | ARRIVE task4
+12581 ms | ARRIVE task5
+12581 ms | ARRIVE task6
+12581 ms | ARRIVE task7
+12582 ms | START task1
+12582 ms | START task2
+12582 ms | START task0
+12585 ms | START task3
+12586 ms | START task4
+12589 ms | START task5
+12590 ms | START task6
+12595 ms | START task7
+43952 ms | END task6
+49511 ms | END task4
+88546 ms | END task0
+99922 ms | END task5
+107161 ms | END task2
+113064 ms | END task1
+113459 ms | END task3
+113895 ms | END task7
+----OUTPUT END----
+App aborted
