@@ -12,7 +12,7 @@ endif()
 if(${PLATFORM} STREQUAL "rpi")
     include(pico-sdk/pico_sdk_init.cmake)
 
-    set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-LLREF")
+    set(FREERTOS_KERNEL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/FreeRTOS-DEFAULT")
     include(FreeRTOS_Kernel_import.cmake)
 endif()
 
@@ -72,10 +72,12 @@ endif()
 
 add_executable(edf "${COMMON_SOURCES}")
 add_executable(llref "${COMMON_SOURCES}")
+add_executable(default "${COMMON_SOURCES}")
 
 set(TARGETS
     edf
     llref
+    default
 )
 
 # Add specific sources/includes
@@ -110,15 +112,20 @@ endforeach(T)
 # Add common directives
 target_link_libraries(edf PRIVATE common)
 target_link_libraries(llref PRIVATE common)
+target_link_libraries(default PRIVATE common)
 
 if(${PLATFORM} STREQUAL "rpi")
     target_link_libraries(edf PRIVATE pico_stdlib FreeRTOS-Kernel)
     target_link_libraries(llref PRIVATE pico_stdlib FreeRTOS-Kernel)
+    target_link_libraries(default PRIVATE pico_stdlib FreeRTOS-Kernel)
 
     pico_enable_stdio_usb(edf 1)
     pico_enable_stdio_uart(edf 0)
     pico_enable_stdio_usb(llref 1)
     pico_enable_stdio_uart(llref 0)
+    pico_enable_stdio_usb(default 1)
+    pico_enable_stdio_uart(default 0)
     pico_add_extra_outputs(edf)
     pico_add_extra_outputs(llref)
+    pico_add_extra_outputs(default)
 endif()

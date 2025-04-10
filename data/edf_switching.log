@@ -1,0 +1,38 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2025.04.09 00:25:01 =~=~=~=~=~=~=~=~=~=~=~=
+Running on rpi without SMP
+We are running edf
+0 | Core0: Tmr Svc
+0 | Core0: Watcher
+0 | Core0: Tmr Svc
+0 | Core0: BWorker4
+Task 4 started
+Task 4 ended
+4704 | Core0: Tmr Svc
+4704 | Core0: BWorker5
+Task 5 started
+Task 5 ended
+18165 | Core0: Tmr Svc
+18165 | Core0: BWorker3
+Task 3 started
+Task 3 ended
+35590 | Core0: Tmr Svc
+35590 | Core0: BWorker6
+Task 6 started
+Task 6 ended
+39501 | Core0: Tmr Svc
+39501 | Core0: BWorker1
+Task 1 started
+Task 1 ended
+56728 | Core0: Tmr Svc
+56728 | Core0: BWorker7
+Task 7 started
+Task 7 ended
+74585 | Core0: Tmr Svc
+74585 | Core0: BWorker2
+Task 2 started
+Task 2 ended
+89848 | Core0: Tmr Svc
+89848 | Core0: BWorker0
+Task 0 started
+Task 0 ended
+

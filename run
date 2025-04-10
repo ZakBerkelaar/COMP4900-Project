@@ -19,6 +19,9 @@ then
 elif [ "$TARGET" = "llref" ]
 then
     IMAGE=build/llref
+elif [ "$TARGET" = "default" ]
+then
+    IMAGE=build/default
 else
     echo "Unknown target $TARGET"
     exit 1

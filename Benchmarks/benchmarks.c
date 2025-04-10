@@ -97,9 +97,12 @@ static void benchmark_worker(void* data)
     e.data.finished.worker_id = bData->id;
     push_event(&e);
 
+#if defined SCHED_LLREF
     TickType_t remaining = pubGetxRemainingExecutionTime(xTaskGetCurrentTaskHandle());
     printf("Task %d ended with %d remaining\n", bData->id, remaining);
-
+#else
+    printf("Task %d ended\n", bData->id);
+#endif
     // Let the watcher know we are done here
     xEventGroupSetBits(finished_event, 1 << bData->id);
 
@@ -167,8 +170,10 @@ void create_benchmark_task(uint32_t id, uint32_t deadlineMs, uint32_t runtimeMs)
         deadlines[id],
 #elif defined SCHED_LLREF
         execution_times[id], 
+#elif defined SCHED_DEFAULT
+        configMAX_PRIORITIES - 1,
 #else
-        4,
+        #error Unknown scheduler
 #endif
 
         &worker_stacks[id][0],
@@ -186,6 +191,7 @@ void watcher(void* args)
 
     event_count = eQueue.eventCount;
 
+    printf("%d context switches occured\n", get_context_switch_count());
     printf("Total events: %d\n", event_count);
 
     printf("---OUTPUT START---\n");
@@ -262,8 +268,12 @@ void run_benchmarks(void)
         NULL,
 #if defined SCHED_LLREF
         (TickType_t)-1, // Big number so it runs first
-#else // EDf
+#elif defined SCHED_EDF 
         0, // Deadline 0 to make it run first
+#elif defined SCHED_DEFAULT
+        0, // Priority 0
+#else
+        #error Unknown scheduler
 #endif
         watcher_stack,
         &watcher_tcb

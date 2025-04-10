@@ -166,3 +166,33 @@ Time_t get_time_frequency_ms(void)
     #error Not implemented
 #endif
 }
+
+static uint32_t context_switch_count = 0;
+
+void print_new_task(void)
+{
+#if defined USE_SMP
+    static TaskHandle_t previous_tasks[configNUMBER_OF_CORES];
+    for(uint32_t i = 0; i < configNUMBER_OF_CORES; ++i)
+    {
+        TaskHandle_t task = xTaskGetCurrentTaskHandleForCore(i);
+
+        if(previous_tasks[i] != task)
+        {
+            printf("%d | Core%d: %s\n", xTaskGetTickCount(), i, pcTaskGetName(task));
+            previous_tasks[i] = task;
+        }
+    }
+#else
+    TaskHandle_t newTask = xTaskGetCurrentTaskHandle();
+    const char* name = pcTaskGetName(newTask);
+
+    printf("%d | Core0: %s\n", xTaskGetTickCount(), name);
+#endif
+    context_switch_count++;
+}
+
+uint32_t get_context_switch_count()
+{
+    return context_switch_count;
+}
